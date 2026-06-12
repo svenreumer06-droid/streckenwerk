@@ -1,0 +1,2596 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#e9ece7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Streckenwerk">
+<meta name="format-detection" content="telephone=no">
+<title>Streckenwerk — Joggingrouten planen &amp; generieren</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root{
+    --ink:#1f2421;
+    --bg:#e9ece7;
+    --panel:#ffffff;
+    --track:#c44524;
+    --track-deep:#a23618;
+    --pine:#2e5e4e;
+    --line:#c9cfc6;
+    --dim:#6b7370;
+    --soft:#f2f4f0;
+    --radius:8px;
+    --shadow:0 10px 30px rgba(31,36,33,.14);
+    --font-display:"Saira Condensed",system-ui,sans-serif;
+    --font-body:"IBM Plex Sans",system-ui,sans-serif;
+    --font-mono:"IBM Plex Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    font-family:var(--font-body);background:var(--bg);color:var(--ink);
+    font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;
+  }
+  button{font:inherit;cursor:pointer;border:none;background:none;color:inherit;touch-action:manipulation}
+  input,select{font:inherit;color:inherit}
+  :focus-visible{outline:3px solid var(--track);outline-offset:2px;border-radius:4px}
+
+  /* ---------- Layout ---------- */
+  .app{display:flex;height:100dvh;overflow:hidden}
+  .panel{
+    width:368px;min-width:368px;background:var(--bg);
+    border-right:1px solid var(--line);
+    display:flex;flex-direction:column;overflow-y:auto;
+    padding:18px 18px 28px;gap:18px;
+  }
+  .stage{flex:1;position:relative;background:#dfe3dd}
+  #map{position:absolute;inset:0;z-index:1}
+
+  /* ---------- Markenkopf & Konto ---------- */
+  .brand{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .brand h1{
+    font-family:var(--font-display);font-weight:700;font-size:30px;
+    letter-spacing:.06em;text-transform:uppercase;line-height:1;
+  }
+  .brand h1 em{font-style:normal;color:var(--track)}
+  .brand .sub{font-size:12px;color:var(--dim)}
+  .auth{
+    margin-left:auto;display:flex;align-items:center;gap:7px;
+    font-size:12.5px;font-weight:600;padding:7px 12px;
+    border:1px solid var(--line);border-radius:99px;background:var(--panel);
+    box-shadow:0 2px 8px rgba(31,36,33,.08);
+  }
+  .auth[hidden]{display:none!important}
+  .auth:hover{border-color:var(--ink)}
+  .auth img{width:20px;height:20px;border-radius:50%}
+  .auth img[hidden]{display:none}
+  .auth svg{flex:none}
+
+  /* ---------- Startnummern-Tafel ---------- */
+  .bib{
+    position:relative;background:var(--panel);
+    border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+  }
+  .bib::before,.bib::after,.bib .pin-l,.bib .pin-r{
+    content:"";position:absolute;width:9px;height:9px;border-radius:50%;
+    background:var(--bg);border:2px solid var(--line);z-index:2;
+  }
+  .bib::before{top:-4px;left:14px}
+  .bib::after{top:-4px;right:14px}
+  .bib .pin-l{bottom:-4px;left:14px}
+  .bib .pin-r{bottom:-4px;right:14px}
+  .bib-strip{
+    background:var(--track);color:#fff;border-radius:var(--radius) var(--radius) 0 0;
+    padding:8px 16px;display:flex;align-items:center;gap:8px;
+  }
+  .bib-strip label{
+    font-family:var(--font-display);font-weight:600;font-size:12px;
+    letter-spacing:.18em;text-transform:uppercase;opacity:.85;white-space:nowrap;
+  }
+  .bib-strip input{
+    flex:1;min-width:0;background:transparent;border:none;color:#fff;
+    font-family:var(--font-display);font-weight:600;font-size:17px;
+    letter-spacing:.04em;text-transform:uppercase;
+    border-bottom:1px dashed rgba(255,255,255,.45);padding:0 2px 2px;
+  }
+  .bib-strip input::placeholder{color:rgba(255,255,255,.6)}
+  .bib-strip input:focus{outline:none;border-bottom-color:#fff}
+  .bib-main{padding:14px 16px 6px;text-align:center}
+  .bib-dist{
+    font-family:var(--font-display);font-weight:700;font-size:70px;line-height:.95;
+    letter-spacing:.01em;font-variant-numeric:tabular-nums;transition:transform .12s ease;
+  }
+  .bib-dist.tick{transform:scale(1.03)}
+  .bib-dist small{font-size:22px;font-weight:600;color:var(--dim);letter-spacing:.08em;margin-left:6px}
+  .bib-sub{display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid var(--line);margin-top:12px}
+  .bib-sub div{padding:10px 6px;text-align:center}
+  .bib-sub div + div{border-left:1px solid var(--line)}
+  .bib-sub b{display:block;font-family:var(--font-mono);font-weight:500;font-size:16px;font-variant-numeric:tabular-nums}
+  .bib-sub span{
+    font-family:var(--font-display);font-weight:600;font-size:11px;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--dim);
+  }
+
+  /* ---------- Sektionen ---------- */
+  .sec{display:flex;flex-direction:column;gap:10px}
+  .eyebrow{
+    font-family:var(--font-display);font-weight:600;font-size:12px;
+    letter-spacing:.22em;text-transform:uppercase;color:var(--dim);
+    display:flex;align-items:center;gap:10px;
+  }
+  .eyebrow::after{content:"";flex:1;height:1px;background:var(--line)}
+  .eyebrow.bar::after{display:none}
+  .eyebrow .line{flex:1;height:1px;background:var(--line)}
+  .eyebrow .mini{
+    font-family:var(--font-body);font-size:12px;font-weight:600;letter-spacing:0;
+    text-transform:none;color:var(--ink);
+    padding:6px 11px;border:1px solid var(--line);border-radius:99px;background:var(--panel);
+  }
+  .eyebrow .mini:hover{border-color:var(--track);color:var(--track)}
+
+  .row{display:flex;align-items:center;gap:10px}
+  .row label{font-size:13px;color:var(--dim);min-width:64px}
+  .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:14px}
+  input[type=range]{flex:1;accent-color:var(--track);height:22px}
+  .num{
+    width:80px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;
+    background:var(--panel);font-family:var(--font-mono);font-size:14px;
+  }
+  select.inp{
+    flex:1;padding:8px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);font-size:13.5px;
+  }
+  .seg{display:grid;grid-template-columns:1fr 1fr;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:3px;gap:3px}
+  .seg button{padding:8px 6px;border-radius:5px;font-weight:600;font-size:13.5px;color:var(--dim)}
+  .seg button[aria-pressed=true]{background:var(--ink);color:#fff}
+  .seg.three{grid-template-columns:1fr 1fr 1fr}
+  .seg.three button{font-size:12.5px;padding:8px 2px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .btn{
+    display:flex;align-items:center;justify-content:center;gap:7px;
+    padding:10px 10px;border-radius:7px;font-weight:600;font-size:13.5px;
+    background:var(--panel);border:1px solid var(--line);
+    transition:background .12s ease,border-color .12s ease;
+  }
+  .btn:hover{border-color:var(--ink)}
+  .btn:disabled{opacity:.45;cursor:not-allowed;border-color:var(--line)}
+  .btn.primary{background:var(--track);border-color:var(--track);color:#fff}
+  .btn.primary:hover{background:var(--track-deep)}
+  .btn.primary:disabled{background:var(--track);opacity:.55}
+  .btn.quiet{background:transparent}
+  .btn svg{flex:none}
+  .hint{font-size:12px;color:var(--dim)}
+
+  /* ---------- Generator-Vorschläge ---------- */
+  .props{display:flex;flex-direction:column;gap:6px}
+  .prop{
+    display:flex;align-items:center;gap:10px;
+    background:var(--panel);border:1px solid var(--line);border-radius:7px;
+    padding:9px 11px;cursor:pointer;
+  }
+  .prop[aria-selected=true]{border-color:var(--track);box-shadow:0 0 0 1px var(--track) inset}
+  .prop .tag{
+    width:26px;height:26px;border-radius:50%;flex:none;
+    background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-display);font-weight:600;font-size:13px;
+  }
+  .prop[aria-selected=true] .tag{background:var(--track)}
+  .prop .meta{flex:1;min-width:0}
+  .prop .meta b{display:block;font-family:var(--font-mono);font-weight:500;font-size:14px}
+  .prop .meta span{font-size:12px;color:var(--dim)}
+  .prop .use{font-size:12.5px;font-weight:600;padding:6px 10px;border-radius:5px;border:1px solid var(--line)}
+  .prop .use:hover{border-color:var(--track);color:var(--track)}
+
+  /* ---------- Archiv ---------- */
+  .saved{display:flex;flex-direction:column;gap:6px}
+  .saved-empty{font-size:13px;color:var(--dim)}
+  .saved-item{
+    display:flex;align-items:center;gap:10px;background:var(--panel);
+    border:1px solid var(--line);border-radius:7px;padding:10px 11px;
+  }
+  .saved-item .badge{
+    width:30px;height:30px;border-radius:7px;flex:none;
+    background:var(--soft);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;color:var(--track);
+  }
+  .saved-item .meta{flex:1;min-width:0}
+  .saved-item .meta b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .saved-item .meta span{font-family:var(--font-mono);font-size:12px;color:var(--dim)}
+  .saved-item button{
+    font-size:12.5px;font-weight:600;padding:7px 10px;border-radius:6px;border:1px solid var(--line);
+  }
+  .saved-item button:hover{border-color:var(--ink)}
+  .saved-item button.del{width:32px;padding:7px 0;color:var(--dim)}
+  .saved-item button.del:hover{border-color:var(--track);color:var(--track)}
+
+  /* ---------- Karte: Bedienelemente ---------- */
+  .float{position:absolute;z-index:1100;display:flex;gap:8px}
+  .float.tr{top:14px;right:14px}
+  .float.br{bottom:26px;right:14px;flex-direction:column}
+  .fbtn{
+    width:44px;height:44px;border-radius:9px;background:var(--panel);
+    border:1px solid var(--line);box-shadow:var(--shadow);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .fbtn:hover{border-color:var(--ink)}
+  select.fsel{
+    height:44px;padding:0 10px;border-radius:9px;border:1px solid var(--line);
+    background:var(--panel);box-shadow:var(--shadow);font-size:13px;font-weight:600;max-width:118px;
+  }
+  .search{
+    position:absolute;top:14px;left:14px;z-index:1100;display:flex;
+    width:min(300px,calc(100% - 168px));
+    background:var(--panel);border:1px solid var(--line);border-radius:9px;
+    box-shadow:var(--shadow);overflow:hidden;
+  }
+  .search input{flex:1;min-width:0;border:none;background:transparent;padding:0 12px;height:44px;font-size:13.5px}
+  .search input:focus{outline:none}
+  .search button{width:46px;display:flex;align-items:center;justify-content:center;border-left:1px solid var(--line);color:var(--dim)}
+  .search button:hover{color:var(--ink)}
+  .map-hint{
+    position:absolute;left:50%;bottom:26px;transform:translateX(-50%);z-index:1100;
+    background:var(--ink);color:#fff;font-size:13px;font-weight:500;
+    padding:9px 16px;border-radius:99px;box-shadow:var(--shadow);
+    display:flex;align-items:center;gap:8px;max-width:88%;
+  }
+  .map-hint .dot{width:8px;height:8px;border-radius:50%;background:var(--track);flex:none}
+
+  /* Fadenkreuz: Start der generierten Runde = Kartenmitte */
+  .crosshair{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    z-index:1090;pointer-events:none;
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+  }
+  .crosshair .ring{
+    width:18px;height:18px;border-radius:50%;
+    border:3px solid var(--track);background:rgba(255,255,255,.55);
+    box-shadow:0 0 0 2px rgba(255,255,255,.8);
+  }
+  .crosshair .lbl{
+    background:var(--ink);color:#fff;font-size:11.5px;font-weight:600;
+    padding:4px 10px;border-radius:99px;white-space:nowrap;box-shadow:var(--shadow);
+  }
+
+  /* ---------- Marathon-Event-Karte ---------- */
+  .event{
+    display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:11px 12px;transition:border-color .12s ease;
+  }
+  .event:hover{border-color:var(--track)}
+  .event-date{
+    flex:none;width:52px;text-align:center;border-radius:7px;overflow:hidden;
+    border:1px solid var(--line);
+  }
+  .event-date b{
+    display:block;background:var(--track);color:#fff;
+    font-family:var(--font-display);font-weight:700;font-size:24px;line-height:1.1;padding:3px 0;
+  }
+  .event-date span{
+    display:block;font-family:var(--font-display);font-weight:600;font-size:10.5px;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding:3px 0;
+  }
+  .event-meta{flex:1;min-width:0}
+  .event-meta b{display:block;font-size:13.5px;line-height:1.25}
+  .event-meta span{display:block;font-size:12px;color:var(--dim)}
+  .event-cd{margin-top:3px;font-family:var(--font-mono);font-size:11.5px;color:var(--track)!important;font-weight:500}
+
+  /* ---------- Tabs ---------- */
+  .tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px}
+  .tab{padding:9px 6px;border-radius:6px;font-weight:600;font-size:13.5px;color:var(--dim)}
+  .tab[aria-selected=true]{background:var(--ink);color:#fff}
+  #tabPlan,#tabAccount{display:flex;flex-direction:column;gap:18px}
+  #tabPlan[hidden],#tabAccount[hidden]{display:none}
+
+  /* ---------- Konto-Box ---------- */
+  .acct{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}
+  .acct img{width:44px;height:44px;border-radius:50%;flex:none;background:var(--soft)}
+  .acct .ai{width:44px;height:44px;border-radius:50%;flex:none;background:var(--soft);display:flex;align-items:center;justify-content:center;color:var(--dim)}
+  .acct .info{flex:1;min-width:0}
+  .acct .info b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .acct .info span{font-size:12px;color:var(--dim)}
+
+  /* ---------- Statistik-Karten ---------- */
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:11px 12px}
+  .stat b{display:block;font-family:var(--font-display);font-weight:700;font-size:24px;line-height:1.1;font-variant-numeric:tabular-nums}
+  .stat b small{font-size:13px;color:var(--dim);font-weight:600;margin-left:3px}
+  .stat span{font-family:var(--font-display);font-weight:600;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+  .stat.wide{grid-column:1 / -1}
+
+  /* ---------- Zielbalken ---------- */
+  .goalbar{height:12px;border-radius:99px;background:var(--soft);border:1px solid var(--line);overflow:hidden}
+  .goalbar span{display:block;height:100%;width:0;background:var(--track);border-radius:99px;transition:width .35s ease}
+  .goalbar span.done{background:var(--pine)}
+
+  /* ---------- Diagnose-Banner ---------- */
+  .map-status{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1200;
+    width:min(420px,calc(100% - 32px));
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);
+    padding:18px 18px 16px;display:none;
+  }
+  .map-status.show{display:block}
+  .map-status h2{
+    font-family:var(--font-display);font-weight:700;font-size:19px;
+    letter-spacing:.05em;text-transform:uppercase;color:var(--track);margin-bottom:6px;
+  }
+  .map-status p{font-size:13.5px;color:var(--ink);margin-bottom:8px}
+  .map-status p.dim{color:var(--dim);font-size:12.5px;margin-bottom:0}
+  .map-status .close{
+    position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:6px;
+    display:flex;align-items:center;justify-content:center;color:var(--dim);border:1px solid var(--line);
+  }
+
+  /* Wegpunkt-Badges */
+  .wp{
+    display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;
+    background:var(--track);color:#fff;font-family:var(--font-display);font-weight:600;font-size:13.5px;
+    border:2px solid #fff;box-shadow:0 2px 6px rgba(31,36,33,.4);
+  }
+  .wp.start{background:var(--pine)}
+  .pulse{width:16px;height:16px;border-radius:50%;background:#2f6fde;border:3px solid #fff;box-shadow:0 0 0 6px rgba(47,111,222,.25)}
+  .leaflet-container{font-family:var(--font-body)}
+  .leaflet-control-attribution{font-size:10px;opacity:.85}
+
+  /* ---------- Bestätigungs-Dialog ---------- */
+  .modal{
+    position:fixed;inset:0;z-index:2500;background:rgba(31,36,33,.42);
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  }
+  .modal[hidden]{display:none}
+  .modal-card{
+    width:min(360px,100%);background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);
+    padding:20px 18px 16px;display:flex;flex-direction:column;gap:14px;
+  }
+  .modal-card p{font-size:14.5px}
+
+  /* ---------- Toast ---------- */
+  .toast{
+    position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translate(-50%,12px);
+    background:var(--ink);color:#fff;font-size:13.5px;padding:10px 16px;border-radius:8px;
+    box-shadow:var(--shadow);opacity:0;pointer-events:none;
+    transition:opacity .18s ease,transform .18s ease;z-index:3000;max-width:92%;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+
+  /* ---------- Routen-Assistent ---------- */
+  .fab-chat{
+    position:absolute;left:14px;bottom:92px;z-index:1150;
+    width:50px;height:50px;border-radius:50%;
+    background:var(--track);color:#fff;box-shadow:var(--shadow);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .fab-chat:hover{background:var(--track-deep)}
+  .fab-chat .badge-ai{
+    position:absolute;top:-5px;right:-5px;background:var(--ink);color:#fff;
+    font-family:var(--font-display);font-weight:700;font-size:9px;letter-spacing:.06em;
+    padding:2px 5px;border-radius:99px;border:2px solid var(--bg);
+  }
+  .chatwin{
+    position:absolute;left:14px;bottom:92px;z-index:1160;
+    width:min(340px,calc(100% - 28px));max-height:min(460px,calc(100% - 120px));
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden;
+  }
+  .chatwin[hidden]{display:none}
+  .chat-head{
+    display:flex;align-items:center;gap:8px;padding:11px 12px;
+    background:var(--ink);color:#fff;
+  }
+  .chat-head b{font-family:var(--font-display);font-weight:600;font-size:14px;letter-spacing:.04em;flex:1}
+  .chat-head .dot{width:8px;height:8px;border-radius:50%;background:var(--track)}
+  .chat-head button{color:#fff;opacity:.8;width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center}
+  .chat-head button:hover{opacity:1;background:rgba(255,255,255,.12)}
+  .chat-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--bg)}
+  .msg{max-width:85%;padding:8px 11px;border-radius:12px;font-size:13px;line-height:1.4;white-space:pre-wrap}
+  .msg.bot{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:4px}
+  .msg.user{align-self:flex-end;background:var(--track);color:#fff;border-bottom-right-radius:4px}
+  .chat-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 8px;background:var(--bg)}
+  .chip{
+    font-size:12px;font-weight:600;padding:6px 10px;border-radius:99px;
+    background:var(--panel);border:1px solid var(--line);color:var(--ink);
+  }
+  .chip:hover{border-color:var(--track);color:var(--track)}
+  .chat-input{display:flex;gap:6px;padding:10px;border-top:1px solid var(--line);background:var(--panel)}
+  .chat-input input{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:14px;background:var(--soft)}
+  .chat-input input:focus{outline:none;border-color:var(--track)}
+  .chat-input button{
+    width:42px;border-radius:8px;background:var(--track);color:#fff;
+    display:flex;align-items:center;justify-content:center;flex:none;
+  }
+  .chat-input button:hover{background:var(--track-deep)}
+
+  /* ---------- Mobil ---------- */
+  @media (max-width:880px){
+    .app{flex-direction:column}
+    .stage{order:0;flex:none;height:54dvh}
+    .panel{
+      order:1;width:100%;min-width:0;flex:1;border-right:none;border-top:1px solid var(--line);
+      padding:14px 14px calc(24px + env(safe-area-inset-bottom));gap:16px;
+    }
+    .bib-dist{font-size:56px}
+    .fab-chat{bottom:78px;width:46px;height:46px}
+    .chatwin{bottom:78px;max-height:min(70%,360px)}
+    .chat-input input{font-size:16px}
+    /* iOS zoomt bei Eingabefeldern unter 16px — deshalb hier größer */
+    input[type=number],select,.search input,#routeName{font-size:16px}
+    .num{width:88px}
+    .btn{padding:12px 10px;font-size:14px}
+    .seg button{padding:11px 4px}
+    .seg.three button{font-size:13px}
+    .prop .use{padding:9px 12px}
+    .saved-item button{padding:9px 12px}
+    .saved-item button.del{width:38px;padding:9px 0}
+    .crosshair .lbl{font-size:11px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important;animation:none!important}
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="panel">
+
+    <div class="brand">
+      <h1>Strecken<em>werk</em></h1>
+      <span class="sub">Planen &amp; Generieren</span>
+      <button class="auth" id="authBtn" hidden>
+        <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.1 5.7l6.2 5.2C36.9 40.6 44 36 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+        Mit Google anmelden
+      </button>
+      <button class="auth" id="authUser" hidden>
+        <img id="authImg" alt="" hidden>
+        <span id="authName"></span>
+      </button>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" id="tabBtnPlan" role="tab" aria-selected="true">Strecke</button>
+      <button class="tab" id="tabBtnAccount" role="tab" aria-selected="false">Konto &amp; Ziele</button>
+    </div>
+
+    <div id="tabPlan">
+
+    <!-- Startnummern-Tafel -->
+    <div class="bib" aria-live="polite">
+      <i class="pin-l"></i><i class="pin-r"></i>
+      <div class="bib-strip">
+        <label for="routeName">Strecke</label>
+        <input id="routeName" placeholder="Morgenrunde" maxlength="32" autocomplete="off">
+      </div>
+      <div class="bib-main">
+        <div class="bib-dist" id="distOut">0,00<small>km</small></div>
+      </div>
+      <div class="bib-sub">
+        <div><b id="timeOut">0:00</b><span>Dauer</span></div>
+        <div><b id="kcalOut">0</b><span>kcal</span></div>
+        <div><b id="ptsOut">0</b><span>Punkte</span></div>
+      </div>
+    </div>
+
+    <!-- Runden-Generator -->
+    <section class="sec">
+      <div class="eyebrow">Runde generieren</div>
+      <div class="row">
+        <label for="genDist">Distanz</label>
+        <input type="number" id="genDist" class="num" min="1" max="60" step="0.5" value="5"> km
+        <label for="genCount" style="min-width:0;margin-left:auto">Anzahl</label>
+        <input type="number" id="genCount" class="num" min="1" max="5" step="1" value="3" style="width:62px">
+      </div>
+      <div class="row">
+        <label for="genDir">Richtung</label>
+        <select class="inp" id="genDir" aria-label="Richtung">
+          <option value="auto">egal</option>
+          <option value="0">nach Norden</option>
+          <option value="90">nach Osten</option>
+          <option value="180">nach Süden</option>
+          <option value="270">nach Westen</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Untergrund</label>
+        <div class="seg three" role="group" aria-label="Untergrund" style="flex:1">
+          <button data-surf="any" aria-pressed="true">Egal</button>
+          <button data-surf="paved" aria-pressed="false">Asphalt</button>
+          <button data-surf="trail" aria-pressed="false">Wald&nbsp;&amp;&nbsp;Trail</button>
+        </div>
+      </div>
+      <div class="row">
+        <label>Höhe</label>
+        <div class="seg three" role="group" aria-label="Höhenmeter" style="flex:1">
+          <button data-elev="any" aria-pressed="true">Egal</button>
+          <button data-elev="flat" aria-pressed="false">Flach</button>
+          <button data-elev="hilly" aria-pressed="false">Hügelig</button>
+        </div>
+      </div>
+      <button class="btn primary" id="genBtn">3 Runden vorschlagen</button>
+      <p class="hint">Gehe per Suche oder Standort-Knopf zum Wunschort — das Fadenkreuz in der Kartenmitte ist Start <em>und</em> Ziel. Es entstehen bis zu fünf echte Schleifen ohne Hin-und-zurück und ohne See-Überquerung, jede so nah wie möglich an deiner Wunschdistanz.</p>
+      <div class="props" id="props"></div>
+    </section>
+
+    <!-- Tempo -->
+    <section class="sec">
+      <div class="eyebrow">Tempo</div>
+      <div class="row">
+        <label for="pace">Pace</label>
+        <input type="range" id="pace" min="210" max="540" step="15" value="360">
+        <span class="mono" id="paceOut">6:00&nbsp;/km</span>
+      </div>
+      <div class="row">
+        <label for="weight">Gewicht</label>
+        <input type="number" id="weight" class="num" min="35" max="180" step="1" value="70"> kg
+        <span class="hint" style="margin-left:auto">für die Kalorienschätzung</span>
+      </div>
+    </section>
+
+    <!-- Strecke -->
+    <section class="sec">
+      <div class="eyebrow">Selbst zeichnen</div>
+      <div class="seg" role="group" aria-label="Routenführung">
+        <button id="modeWalk" aria-pressed="true">Wegen folgen</button>
+        <button id="modeDirect" aria-pressed="false">Luftlinie</button>
+      </div>
+      <div class="grid2">
+        <button class="btn" id="undoBtn" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-2"/></svg>
+          Punkt zurück
+        </button>
+        <button class="btn" id="clearBtn" disabled>Strecke leeren</button>
+        <button class="btn" id="loopBtn" disabled>Runde schließen</button>
+        <button class="btn" id="reverseBtn" disabled>Richtung umkehren</button>
+      </div>
+      <button class="btn quiet" id="locStartBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+        Meinen Standort als Start setzen
+      </button>
+    </section>
+
+    <!-- Mitnehmen -->
+    <section class="sec">
+      <div class="eyebrow">Mitnehmen</div>
+      <div class="grid2">
+        <button class="btn primary" id="gpxBtn" disabled>GPX exportieren</button>
+        <button class="btn" id="saveBtn" disabled>Strecke speichern</button>
+      </div>
+      <button class="btn" id="shareBtn" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5 8.6 10.5"/></svg>
+        Route teilen
+      </button>
+      <button class="btn quiet" id="importBtn">GPX-Datei importieren …</button>
+      <input type="file" id="gpxFile" accept=".gpx,application/gpx+xml" hidden>
+    </section>
+
+    <!-- Archiv -->
+    <section class="sec">
+      <div class="eyebrow bar"><span>Meine Strecken</span><i class="line"></i><button class="mini" id="newBtn">+ Neue Strecke</button></div>
+      <div class="saved" id="savedList"></div>
+    </section>
+
+    </div><!-- /tabPlan -->
+
+    <div id="tabAccount" hidden>
+
+      <!-- Konto -->
+      <section class="sec">
+        <div class="eyebrow">Konto</div>
+        <div id="accountBox"></div>
+      </section>
+
+      <!-- Statistiken -->
+      <section class="sec">
+        <div class="eyebrow">Statistiken</div>
+        <div class="stats" id="statsGrid"></div>
+      </section>
+
+      <!-- Wochenziel -->
+      <section class="sec">
+        <div class="eyebrow">Wochenziel</div>
+        <div class="row">
+          <label for="goalKm">Ziel</label>
+          <input type="number" id="goalKm" class="num" min="0" max="500" step="1" value="20"> km / Woche
+        </div>
+        <div class="goalbar"><span id="goalFill"></span></div>
+        <p class="hint" id="goalText"></p>
+      </section>
+
+      <!-- Läufe in der Region -->
+      <section class="sec">
+        <div class="eyebrow">Läufe in der Region</div>
+        <a class="event" href="https://www.swisscitymarathon.ch" target="_blank" rel="noopener">
+          <div class="event-date"><b>25</b><span>Okt&nbsp;26</span></div>
+          <div class="event-meta">
+            <b>SwissCityMarathon&nbsp;– Lucerne</b>
+            <span>Marathon&nbsp;42&nbsp;km · Halb&nbsp;21&nbsp;km · CityRun&nbsp;10&nbsp;km</span>
+            <span class="event-cd" id="eventCountdown"></span>
+          </div>
+        </a>
+        <p class="hint">Sonntag, 25.&nbsp;Oktober&nbsp;2026, Start beim Verkehrshaus Luzern. Aktuell Warteliste — Anmeldung &amp; Infos auf swisscitymarathon.ch.</p>
+      </section>
+
+    </div><!-- /tabAccount -->
+
+  </aside>
+
+  <main class="stage">
+    <div id="map" role="application" aria-label="Karte zum Setzen von Streckenpunkten"></div>
+
+    <div class="crosshair" id="crosshair" aria-hidden="true">
+      <div class="ring"></div>
+      <div class="lbl">Start &amp; Ziel der Runde</div>
+    </div>
+
+    <div class="search">
+      <input id="searchInput" placeholder="Ort suchen, z. B. Zürichsee" autocomplete="off">
+      <button id="searchBtn" aria-label="Suchen">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      </button>
+    </div>
+
+    <div class="map-hint" id="mapHint">
+      <span class="dot"></span> Tippe auf die Karte oder lass dir oben eine Runde vorschlagen
+    </div>
+
+    <div class="map-hint" id="sharedBanner" style="display:none;background:var(--pine);top:64px;bottom:auto">
+      <span class="dot" style="background:#fff"></span>
+      <span id="sharedText">Geteilte Route</span>
+      <button id="sharedSave" style="margin-left:6px;color:#fff;text-decoration:underline;font-weight:600">speichern</button>
+      <button id="sharedClose" aria-label="Schließen" style="margin-left:4px;color:#fff;opacity:.8">✕</button>
+    </div>
+
+    <div class="map-status" id="mapStatus">
+      <button class="close" id="statusClose" aria-label="Schließen">✕</button>
+      <h2>Kartenbilder blockiert</h2>
+      <p>Diese Vorschau-Umgebung lässt keine externen Kartenbilder und Routing-Anfragen durch. <strong>Auf deiner Netlify-Adresse (oder lokal im Browser geöffnet)</strong> laden Karte, Standort, Suche, Routing und Anmeldung vollständig.</p>
+      <p class="dim">Hier funktionieren trotzdem: Punkte setzen, Luftlinien-Messung, der Generator als geometrische Vorschau sowie GPX-Export.</p>
+    </div>
+
+    <div class="float tr">
+      <select class="fsel" id="mapType" aria-label="Kartentyp">
+        <option value="voyager">Dezent</option>
+        <option value="osm">Standard</option>
+        <option value="topo">Topo</option>
+        <option value="sat">Satellit</option>
+      </select>
+    </div>
+    <div class="float br">
+      <button class="fbtn" id="fitBtn" title="Strecke einpassen" aria-label="Strecke einpassen">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+      </button>
+      <button class="fbtn" id="locBtn" title="Zu meinem Standort" aria-label="Zu meinem Standort">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+      </button>
+    </div>
+    <button class="fab-chat" id="chatFab" title="Routen-Assistent" aria-label="Routen-Assistent">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7a8.5 8.5 0 0 1-.9-3.8A8.38 8.38 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z"/></svg>
+      <span class="badge-ai">KI</span>
+    </button>
+
+    <div class="chatwin" id="chatWin" hidden>
+      <div class="chat-head">
+        <span class="dot"></span>
+        <b>Routen-Assistent</b>
+        <button id="chatClose" aria-label="Schließen">✕</button>
+      </div>
+      <div class="chat-msgs" id="chatMsgs"></div>
+      <div class="chat-chips" id="chatChips"></div>
+      <div class="chat-input">
+        <input id="chatText" placeholder="z. B. „2 km länger und flacher”" autocomplete="off">
+        <button id="chatSend" aria-label="Senden">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>
+        </button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Bestätigungs-Dialog -->
+<div class="modal" id="confirm" hidden>
+  <div class="modal-card">
+    <p id="confirmMsg"></p>
+    <div class="grid2">
+      <button class="btn" id="confirmNo">Abbrechen</button>
+      <button class="btn primary" id="confirmYes">Ja</button>
+    </div>
+  </div>
+</div>
+
+<!-- Teilen-Dialog -->
+<div class="modal" id="shareModal" hidden>
+  <div class="modal-card">
+    <p style="font-weight:600">Route veröffentlicht</p>
+    <p class="hint" id="shareName" style="margin-top:-6px"></p>
+    <p class="hint">Jede Person mit diesem Link kann die Runde ansehen, als GPX exportieren oder in ihr eigenes Konto übernehmen.</p>
+    <div style="display:flex;gap:8px">
+      <input id="shareUrl" readonly style="flex:1;min-width:0;padding:9px 11px;border:1px solid var(--line);border-radius:6px;font-family:var(--font-mono);font-size:12.5px;background:var(--soft)">
+      <button class="btn" id="shareCopy" style="white-space:nowrap">Kopieren</button>
+    </div>
+    <div class="grid2">
+      <button class="btn" id="shareNative">Teilen …</button>
+      <button class="btn primary" id="shareClose">Fertig</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* ============================================================
+   OPTIONAL: Google-Anmeldung & Konto-Speicher (Firebase)
+   ------------------------------------------------------------
+   1. console.firebase.google.com → Projekt erstellen (gratis)
+   2. Im Projekt: Web-App (</>) hinzufügen → angezeigte
+      firebaseConfig hier statt `null` einfügen
+   3. Authentication → Sign-in method → Google aktivieren
+   4. Authentication → Settings → Authorized domains →
+      deine Netlify-Adresse (z. B. streckenwerk.netlify.app) hinzufügen
+   5. Firestore Database → Datenbank erstellen (production mode)
+      und unter „Regeln” Folgendes einsetzen:
+
+      rules_version = '2';
+      service cloud.firestore {
+        match /databases/{database}/documents {
+          match /users/{uid}/routes/{routeId} {
+            allow read, write: if request.auth != null
+                               && request.auth.uid == uid;
+          }
+          match /shared/{routeId} {
+            allow read: if true;
+            allow create: if request.auth != null
+                          && request.resource.data.ownerUid == request.auth.uid;
+            allow update, delete: if request.auth != null
+                                  && resource.data.ownerUid == request.auth.uid;
+          }
+        }
+      }
+
+   Bleibt der Wert `null`, läuft die App ganz normal —
+   Strecken werden dann nur auf diesem Gerät gespeichert.
+   ============================================================ */
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyA0CMp9r9v4cgSrtc95nM0nkiNw5-wWTLQ",
+  authDomain: "streckenwerk.firebaseapp.com",
+  projectId: "streckenwerk",
+  storageBucket: "streckenwerk.firebasestorage.app",
+  messagingSenderId: "434751203438",
+  appId: "1:434751203438:web:fe89e8919729bcacf39e7f",
+  measurementId: "G-B25CGM26G9"
+};
+/* Beispiel:
+window.FIREBASE_CONFIG = {
+  apiKey: "…",
+  authDomain: "streckenwerk.firebaseapp.com",
+  projectId: "streckenwerk",
+  storageBucket: "streckenwerk.appspot.com",
+  messagingSenderId: "…",
+  appId: "…"
+};
+*/
+
+/* ============================================================
+   OPTIONAL, aber EMPFOHLEN für deutlich schönere Runden:
+   OpenRouteService-Schlüssel (gratis). Dieser Dienst hat einen
+   eigenen „Round-Trip”-Modus, der echte Rundkurse ohne
+   Hin-und-zurück und ohne zufällige Schlenker erzeugt.
+   ------------------------------------------------------------
+   1. openrouteservice.org/dev → kostenlos registrieren
+   2. Dashboard → „Request a token” / API-Key erstellen
+      (Plan „Standard”, 2'000 Anfragen/Tag gratis)
+   3. Den Schlüssel unten zwischen die Anführungszeichen setzen.
+   Bleibt der Wert leer, nutzt die App weiterhin den
+   eingebauten Generator (ohne Schlüssel, etwas einfacher).
+   Hinweis: Der Schlüssel ist im Seitenquelltext sichtbar – für
+   eine private/kleine Seite in Ordnung; er lässt sich jederzeit
+   im OpenRouteService-Dashboard zurücksetzen.
+   ============================================================ */
+window.ORS_API_KEY = "";
+
+/* ============================================================
+   KI-Chat (frei formulierte Anpassungen) — Betriebsart
+   ------------------------------------------------------------
+   Der Routen-Assistent kann frei formulierte Sätze verstehen
+   („mach die Runde etwas kürzer, lieber im Wald, drei Varianten")
+   und Fragen zur Runde beantworten — über das Modell Claude.
+
+   ▸ SICHER (empfohlen): Server-Proxy. AI_PROXY = true lassen.
+     Die App ruft den eigenen Endpunkt /.netlify/functions/chat
+     auf; der Schlüssel liegt dort als geheime Umgebungsvariable
+     ANTHROPIC_API_KEY auf dem Server und ist NIE im Browser
+     sichtbar. (Einrichtung: siehe README im Projektpaket.)
+
+   ▸ Schnell, aber UNSICHER: AI_PROXY = false setzen und unten
+     einen Schlüssel in AI_API_KEY eintragen. Dann ruft der
+     Browser Claude direkt — der Schlüssel ist im Quelltext
+     sichtbar und kann missbraucht werden. Nur privat nutzen.
+
+   ▸ Ohne beides: eingebauter Assistent (feste Muster, kostenlos).
+   ============================================================ */
+window.AI_PROXY   = true;                          // sicherer Server-Proxy (kein Schlüssel im Browser)
+window.AI_API_KEY = "";                            // NUR für die unsichere Direktvariante (AI_PROXY=false)
+window.AI_MODEL   = "claude-haiku-4-5-20251001";   // schnell & günstig; bei Bedarf änderbar
+
+
+</script>
+
+<script>
+"use strict";
+
+/* ================= Hilfen ================= */
+const $ = id => document.getElementById(id);
+const toastEl = $("toast");
+let toastTimer = null;
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>toastEl.classList.remove("show"), 3800);
+}
+window.__appToast = toast;
+
+function ask(msg, yesLabel = "Ja"){
+  return new Promise(res=>{
+    $("confirmMsg").textContent = msg;
+    $("confirmYes").textContent = yesLabel;
+    const m = $("confirm");
+    m.hidden = false;
+    const done = (val)=>{
+      m.hidden = true;
+      m.onclick = null;
+      document.removeEventListener("keydown", onKey);
+      res(val);
+    };
+    $("confirmYes").onclick = ()=>done(true);
+    $("confirmNo").onclick  = ()=>done(false);
+    m.onclick = e => { if (e.target === m) done(false); };           // Klick auf Hintergrund = abbrechen
+    const onKey = e => { if (e.key === "Escape") done(false); };
+    document.addEventListener("keydown", onKey);
+    $("confirmYes").focus();
+  });
+}
+
+const fmtKm = m => (m/1000).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2});
+function fmtDur(sec){
+  sec = Math.round(sec);
+  const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+  return h>0 ? `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`
+             : `${m}:${String(s).padStart(2,"0")}`;
+}
+function fmtPace(sec){
+  const m = Math.floor(sec/60), s = sec%60;
+  return `${m}:${String(s).padStart(2,"0")}\u00A0/km`;
+}
+const pathLength = pts => pts.reduce((s,p,i)=> i ? s + pts[i-1].distanceTo(p) : 0, 0);
+const newId = ()=> (crypto.randomUUID ? crypto.randomUUID() : "r" + Date.now() + Math.random().toString(36).slice(2,8));
+
+function destPoint(latlng, bearingDeg, distM){
+  const R = 6371000, br = bearingDeg*Math.PI/180;
+  const la1 = latlng.lat*Math.PI/180, lo1 = latlng.lng*Math.PI/180, dr = distM/R;
+  const la2 = Math.asin(Math.sin(la1)*Math.cos(dr) + Math.cos(la1)*Math.sin(dr)*Math.cos(br));
+  const lo2 = lo1 + Math.atan2(Math.sin(br)*Math.sin(dr)*Math.cos(la1),
+                               Math.cos(dr) - Math.sin(la1)*Math.sin(la2));
+  return L.latLng(la2*180/Math.PI, ((lo2*180/Math.PI)+540)%360-180);
+}
+function bearingText(deg){
+  const dirs = ["Nord","Nordost","Ost","Südost","Süd","Südwest","West","Nordwest"];
+  return dirs[Math.round(((deg%360)+360)%360/45)%8];
+}
+
+/* Rundheit einer Schleife: 1 = perfekter Kreis, ~0 = hin-und-zurück */
+function roundness(coords){
+  if (!coords || coords.length < 4) return 0;
+  const lat0 = coords[0].lat * Math.PI/180, R = 6371000;
+  let area = 0, per = 0, px = 0, py = 0;
+  for (let i = 0; i < coords.length; i++){
+    const x = R*Math.cos(lat0)*(coords[i].lng*Math.PI/180);
+    const y = R*(coords[i].lat*Math.PI/180);
+    if (i){
+      area += px*y - x*py;
+      per += Math.hypot(x-px, y-py);
+    }
+    px = x; py = y;
+  }
+  area = Math.abs(area)/2;
+  if (per <= 0) return 0;
+  return Math.min(1, 4*Math.PI*area/(per*per));
+}
+/* Längster Sprung zwischen zwei Routenpunkten (Fähren = lange Geraden übers Wasser) */
+function maxJump(coords){
+  let mx = 0;
+  for (let i = 1; i < coords.length; i++) mx = Math.max(mx, coords[i-1].distanceTo(coords[i]));
+  return mx;
+}
+/* Route in gleichmäßige Punkte zerlegen (für die Überlappungsmessung) */
+function resample(coords, stepM){
+  if (coords.length < 2) return coords.slice();
+  const out = [coords[0]];
+  let prev = coords[0], acc = 0;
+  for (let i = 1; i < coords.length; i++){
+    let target = coords[i];
+    let segLen = prev.distanceTo(target);
+    while (acc + segLen >= stepM && segLen > 0){
+      const t = (stepM - acc) / segLen;
+      const np = L.latLng(prev.lat + (target.lat - prev.lat) * t,
+                          prev.lng + (target.lng - prev.lng) * t);
+      out.push(np);
+      prev = np; acc = 0; segLen = prev.distanceTo(target);
+    }
+    acc += segLen; prev = target;
+  }
+  return out;
+}
+/* Anteil doppelt gelaufener Wege (Sackgassen-„Antennen”, Hin-und-zurück-Stücke). 0 = sauberer Rundkurs */
+function overlapRatio(coords, totalM){
+  const step = Math.max(22, (totalM || pathLength(coords)) / 500);
+  const pts = resample(coords, step);
+  const n = pts.length;
+  if (n < 12) return 0;
+  const gap = 6, thr = step * 1.2;
+  let revisited = 0;
+  for (let i = 0; i < n; i++){
+    for (let j = 0; j < i - gap; j++){
+      if (pts[i].distanceTo(pts[j]) < thr){ revisited++; break; }
+    }
+  }
+  return revisited / n;
+}
+/* k Stützpunkte gleichmäßig um den Kreis verteilen (Start sitzt bei backB) */
+function loopVias(center, backB, k, r){
+  const vias = [];
+  for (let i = 1; i <= k; i++) vias.push(destPoint(center, (backB + 360*i/(k+1)) % 360, r));
+  return vias;
+}
+/* Sackgassen-„Antennen” aus einer Route schneiden → echte Rundkurse ohne Hin-und-zurück.
+   Sucht Stellen, an denen die Route nach einer kurzen Ausbuchtung wieder zum Ausgangspunkt
+   zurückkehrt, und entfernt die doppelt gelaufene Schleife. Ein Fenster begrenzt die Suche,
+   damit die eigentliche Runde (Rückkehr zum Start am Ende) nie kollabiert. */
+function trimSpurs(coords){
+  if (coords.length < 8) return coords.slice();
+  const total = pathLength(coords);
+  const step = Math.max(14, total/700);
+  const P = resample(coords, step);
+  const m = P.length;
+  if (m < 12) return coords.slice();
+  const thr = step * 1.5, gap = 4;
+  const W = Math.min(Math.round(700/step), Math.floor(m*0.4));   // Antennen bis ~700 m, nie über 40 % der Runde
+  const keep = new Array(m).fill(true);
+  let i = 0;
+  while (i < m){
+    let bj = -1;
+    const jMax = Math.min(i + W, m - 1);
+    for (let j = jMax; j > i + gap; j--){
+      if (P[i].distanceTo(P[j]) < thr){
+        let far = 0;
+        for (let k = i + 1; k < j; k++){ const d = P[i].distanceTo(P[k]); if (d > far) far = d; }
+        if (far > 45 && far < 400){ bj = j; break; }   // echte Sackgasse, nicht die ferne Rundenseite
+      }
+    }
+    if (bj > 0){ for (let k = i + 1; k <= bj; k++) keep[k] = false; i = bj + 1; }
+    else i++;
+  }
+  let out = P.filter((_, k) => keep[k]);
+  if (out.length >= 2 && out[0].distanceTo(out[out.length-1]) > step*1.5) out.push(out[0]); // Schleife schließen
+  return out.length >= 6 ? out : coords.slice();
+}
+
+/* ================= Karte & Kachel-Failover ================= */
+const map = L.map("map", { zoomControl:false }).setView([51.163, 10.447], 6);
+L.control.zoom({ position:"bottomleft" }).addTo(map);
+
+const tileDefs = {
+  voyager: ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+            {maxZoom:20, subdomains:"abcd", attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'}],
+  osm:     ["https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+            {maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende'}],
+  topo:    ["https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+            {maxZoom:17, subdomains:"abc", attribution:'&copy; OSM, <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)'}],
+  sat:     ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+            {maxZoom:19, attribution:"Tiles &copy; Esri — Esri, Maxar, Earthstar Geographics"}]
+};
+const failoverOrder = ["voyager","osm","topo"];
+let activeLayer = null;
+let tilesOk = false, tileErrs = 0, failIdx = 0;
+
+function setLayer(key, viaFailover = false){
+  if (activeLayer) map.removeLayer(activeLayer);
+  tileErrs = 0;
+  const [url, opts] = tileDefs[key];
+  activeLayer = L.tileLayer(url, opts).addTo(map);
+  activeLayer.on("tileload", ()=>{
+    tilesOk = true; tileErrs = 0;
+    $("mapStatus").classList.remove("show");
+  });
+  activeLayer.on("tileerror", ()=>{
+    tileErrs++;
+    if (!tilesOk && tileErrs >= 5 && !viaFailover){ tryNextProvider(); }
+    else if (!tilesOk && tileErrs >= 5){ showStatus(); }
+  });
+  $("mapType").value = key;
+}
+function tryNextProvider(){
+  failIdx++;
+  if (failIdx < failoverOrder.length){
+    toast("Kartenquelle antwortet nicht — wechsle zu einer anderen …");
+    setLayer(failoverOrder[failIdx], failIdx === failoverOrder.length - 1);
+  } else {
+    showStatus();
+  }
+}
+function showStatus(){ $("mapStatus").classList.add("show"); }
+$("statusClose").addEventListener("click", ()=>$("mapStatus").classList.remove("show"));
+setLayer("voyager");
+setTimeout(()=>{ if (!tilesOk) showStatus(); }, 6000);
+$("mapType").addEventListener("change", e => { failIdx = failoverOrder.length; setLayer(e.target.value, true); });
+
+/* ================= Zustand ================= */
+let waypoints = [];
+let segments  = [];
+let routeMode = "walk";
+let savedRoutes = [];
+let busy = false;
+let dirty = false;
+let routingFails = 0;
+let warnedFallback = false;
+let userMarker = null;
+let proposals = [];
+let surfacePref = "any", elevPref = "any";
+let user = null;            // {uid, name, photo} bei Google-Anmeldung
+
+const totalMeters = () => segments.reduce((s,x)=>s+x.distance, 0);
+
+/* ================= Lokaler Speicher (Gerät) ================= */
+const LS_KEY = "streckenwerk_routes_v1";
+function loadLocalRoutes(){
+  try{
+    const r = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
+    return Array.isArray(r) ? r : [];
+  }catch{ return []; }
+}
+function persistLocal(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(savedRoutes)); }catch{}
+}
+
+/* ================= Marker & Linien ================= */
+function makeMarker(latlng, index){
+  const first = index === 0;
+  return L.marker(latlng, {
+    icon: L.divIcon({
+      className:"",
+      html:`<div class="wp${first ? " start" : ""}">${first ? "S" : index + 1}</div>`,
+      iconSize:[26,26], iconAnchor:[13,13]
+    }),
+    keyboard:false
+  }).addTo(map);
+}
+function drawSegment(seg){
+  seg.line = L.polyline(seg.coords, {
+    color:"#c44524", weight:5, opacity:.92,
+    lineJoin:"round", lineCap:"round",
+    dashArray: seg.dashed ? "10 8" : null
+  }).addTo(map);
+}
+
+/* ================= Routing ================= */
+const straight = (a,b) => ({ coords:[a,b], distance:a.distanceTo(b), dashed:true });
+
+async function osrmRoute(points){
+  const str = points.map(p => `${p.lng.toFixed(6)},${p.lat.toFixed(6)}`).join(";");
+  const url = `https://routing.openstreetmap.de/routed-foot/route/v1/driving/${str}`
+            + `?overview=full&geometries=geojson&steps=false`;
+  const ctl = new AbortController();
+  const timer = setTimeout(()=>ctl.abort(), 9000);
+  const res = await fetch(url, { signal: ctl.signal });
+  clearTimeout(timer);
+  const data = await res.json();
+  const r = data && data.routes && data.routes[0];
+  if (!(r && r.geometry && r.geometry.coordinates && r.geometry.coordinates.length >= 2))
+    throw new Error("no route");
+  const coords = r.geometry.coordinates.map(([lon,lat]) => L.latLng(lat,lon));
+  return { coords, distance: r.distance || pathLength(coords) };
+}
+
+async function routeBetween(a, b){
+  if (routingFails >= 3) return { ...straight(a,b), fallback:true };
+  try{
+    const rt = await osrmRoute([a,b]);
+    routingFails = 0;
+    return { coords: rt.coords, distance: rt.distance, dashed:false };
+  }catch{
+    routingFails++;
+    return { ...straight(a,b), fallback:true };
+  }
+}
+function warnOnceFallback(){
+  if (warnedFallback) return;
+  warnedFallback = true;
+  toast("Wege-Routing hier nicht erreichbar — es wird mit Luftlinien gearbeitet (gestrichelt). Auf deiner Netlify-Adresse klappt das Routing vollständig.");
+}
+
+/* BRouter: Geometrie + Höhenmeter + Wegbeläge + Fähren-Erkennung */
+async function mapPool(items, limit, fn){
+  const out = new Array(items.length).fill(null);
+  let i = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async ()=>{
+    while (i < items.length){
+      const k = i++;
+      try{ out[k] = await fn(items[k], k); }catch{ out[k] = null; }
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+function surfaceStats(messages){
+  let paved = 0, unpaved = 0, other = 0, ferry = 0;
+  (messages || []).forEach(m=>{
+    if (!Array.isArray(m)) return;
+    const dist = +m[3];
+    if (!isFinite(dist) || dist <= 0) return;
+    const tags = String(m[9] || "").toLowerCase();
+    if (tags.includes("ferry")) ferry += dist;
+    if (/surface=(asphalt|paved|concrete|paving_stones|sett|metal)/.test(tags)) paved += dist;
+    else if (/surface=(ground|gravel|fine_gravel|dirt|earth|grass|unpaved|compacted|sand|wood|mud|pebblestone)/.test(tags)) unpaved += dist;
+    else if (/highway=(path|track|bridleway)/.test(tags)) unpaved += dist;
+    else if (/highway=(residential|living_street|primary|secondary|tertiary|unclassified|service|cycleway|footway|pedestrian|steps)/.test(tags)) paved += dist;
+    else other += dist;
+  });
+  const tot = paved + unpaved + other;
+  const pct = v => tot ? Math.round(100*v/tot) : 0;
+  return { pavedPct: pct(paved), unpavedPct: pct(unpaved), ferryM: ferry };
+}
+
+async function brouterRoute(points, profile){
+  const lonlats = points.map(p => `${p.lng.toFixed(6)},${p.lat.toFixed(6)}`).join("|");
+  const url = `https://brouter.de/brouter?lonlats=${lonlats}&profile=${profile}&alternativeidx=0&format=geojson`;
+  const ctl = new AbortController();
+  const timer = setTimeout(()=>ctl.abort(), 12000);
+  const res = await fetch(url, { signal: ctl.signal });
+  clearTimeout(timer);
+  if (!res.ok) throw new Error("brouter " + res.status);
+  const data = await res.json();
+  const f = data && data.features && data.features[0];
+  if (!(f && f.geometry && f.geometry.coordinates && f.geometry.coordinates.length >= 2))
+    throw new Error("no route");
+  const coords = f.geometry.coordinates.map(c => L.latLng(c[1], c[0]));
+  const props = f.properties || {};
+  const distance = +props["track-length"] || pathLength(coords);
+  const ascend = +props["filtered ascend"] || 0;
+  return { coords, distance, ascend, ...surfaceStats(props.messages) };
+}
+
+/* OpenRouteService Round-Trip: erzeugt einen echten Rundkurs der gewünschten Länge,
+   ohne Hin-und-zurück. Liefert Geometrie, Distanz und Höhenmeter. */
+async function orsRoundTrip(start, targetM, seed, profile, points){
+  const key = (window.ORS_API_KEY || "").trim();
+  if (!key) throw new Error("no ors key");
+  const url = `https://api.openrouteservice.org/v2/directions/${profile}/geojson`;
+  const ctl = new AbortController();
+  const timer = setTimeout(()=>ctl.abort(), 13000);
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Authorization": key, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      coordinates: [[start.lng, start.lat]],
+      options: { round_trip: { length: Math.round(targetM), points: points || 5, seed } },
+      elevation: true,
+      instructions: false
+    }),
+    signal: ctl.signal
+  });
+  clearTimeout(timer);
+  if (!res.ok) throw new Error("ors " + res.status);
+  const data = await res.json();
+  const f = data && data.features && data.features[0];
+  if (!(f && f.geometry && f.geometry.coordinates && f.geometry.coordinates.length >= 2))
+    throw new Error("ors empty");
+  const coords = f.geometry.coordinates.map(c => L.latLng(c[1], c[0]));
+  const props = f.properties || {};
+  const distance = (props.summary && props.summary.distance) || pathLength(coords);
+  const ascend = props.ascent || 0;
+  return { coords, distance, ascend };
+}
+
+async function generateOneORS(start, targetM, seed, profile, points){
+  let best = null;
+  let reqLen = targetM;                 // angeforderte Länge, wird Richtung Ziel korrigiert
+  for (let i = 0; i < 3; i++){
+    let rt;
+    try{ rt = await orsRoundTrip(start, reqLen, seed + i*7919, profile, points); }
+    catch(err){ if (best) break; throw err; }
+    const coords = trimSpurs(rt.coords);
+    const distance = pathLength(coords);
+    const cand = { coords, distance, bearing: 0, dashed:false, engine:"ors", ascend: rt.ascend };
+    cand.q = roundness(cand.coords);
+    cand.overlap = overlapRatio(cand.coords, cand.distance);
+    cand.wet = maxJump(rt.coords) > 450;
+    if (!best || Math.abs(cand.distance - targetM) < Math.abs(best.distance - targetM)) best = cand;
+    const ratio = targetM / cand.distance;
+    if (Math.abs(1 - ratio) < 0.04) break;                        // ≤4 % → passt
+    reqLen = Math.max(800, Math.min(80000, reqLen * Math.min(1.4, Math.max(0.7, ratio))));
+  }
+  return best;
+}
+map.on("click", e => {
+  if ($("mapStatus").classList.contains("show")) $("mapStatus").classList.remove("show");
+  addPoint(e.latlng);
+});
+
+async function addPoint(latlng){
+  if (busy){ toast("Einen Moment — Berechnung läuft noch."); return; }
+  busy = true;
+  try{
+    const idx = waypoints.length;
+    const marker = makeMarker(latlng, idx);
+    waypoints.push({ latlng, marker });
+    if (idx > 0){
+      const prev = waypoints[idx-1].latlng;
+      const seg = (routeMode === "walk") ? await routeBetween(prev, latlng) : straight(prev, latlng);
+      drawSegment(seg);
+      segments.push(seg);
+      if (seg.fallback) warnOnceFallback();
+    }
+    dirty = true;
+    refresh();
+  } finally { busy = false; }
+}
+
+function undoPoint(){
+  if (!waypoints.length) return;
+  const wp = waypoints.pop();
+  map.removeLayer(wp.marker);
+  const seg = segments.pop();
+  if (seg && seg.line) map.removeLayer(seg.line);
+  dirty = segments.length > 0;
+  refresh();
+}
+function clearAll(silent = false){
+  waypoints.forEach(w => map.removeLayer(w.marker));
+  segments.forEach(s => s.line && map.removeLayer(s.line));
+  waypoints = []; segments = [];
+  dirty = false;
+  const sb = $("sharedBanner"); if (sb) sb.style.display = "none";
+  refresh();
+  if (!silent) toast("Strecke geleert.");
+}
+async function closeLoop(){
+  if (waypoints.length < 2) return;
+  await addPoint(waypoints[0].latlng);
+  toast("Runde geschlossen — zurück zum Start.");
+}
+async function reverseRoute(){
+  if (busy || waypoints.length < 2) return;
+  busy = true;
+  toast("Richtung wird umgekehrt …");
+  const coords = waypoints.map(w => w.latlng).reverse();
+  waypoints.forEach(w => map.removeLayer(w.marker));
+  segments.forEach(s => s.line && map.removeLayer(s.line));
+  waypoints = []; segments = [];
+  for (let i = 0; i < coords.length; i++){
+    const marker = makeMarker(coords[i], i);
+    waypoints.push({ latlng: coords[i], marker });
+    if (i > 0){
+      const seg = (routeMode === "walk") ? await routeBetween(coords[i-1], coords[i]) : straight(coords[i-1], coords[i]);
+      drawSegment(seg);
+      segments.push(seg);
+    }
+  }
+  busy = false;
+  dirty = true;
+  refresh();
+}
+function fitRoute(){
+  const all = segments.length ? segments.flatMap(s => s.coords)
+            : waypoints.length ? waypoints.map(w => w.latlng) : null;
+  if (all) map.fitBounds(L.latLngBounds(all), { padding:[56,56] });
+}
+
+/* ================= Runden-Generator ================= */
+function clearProposals(){
+  proposals.forEach(p => p.line && map.removeLayer(p.line));
+  proposals = [];
+  $("props").innerHTML = "";
+}
+
+function geometricLoop(start, targetM, bearing){
+  const r = targetM/(2*Math.PI);
+  const center = destPoint(start, bearing, r);
+  const backB = (bearing + 180) % 360;
+  const N = 30, coords = [];
+  for (let k = 0; k <= N; k++) coords.push(destPoint(center, (backB + 360*k/N) % 360, r));
+  return { coords, distance: pathLength(coords), bearing, dashed:true, fallback:true, q:1, wet:false };
+}
+
+async function generateOneBR(start, targetM, bearing, profile){
+  let r = Math.max(150, targetM/(2*Math.PI) * 0.85);
+  let best = null;
+  for (let i = 0; i < 3; i++){
+    const center = destPoint(start, bearing, r);
+    const backB = (bearing + 180) % 360;
+    const vias = loopVias(center, backB, 6, r);   // 6 Stützpunkte → runde Schleife, wenig erzwungene Sackgassen
+    let rt;
+    try{ rt = await brouterRoute([start, ...vias, start], profile); }
+    catch(err){ if (best) break; throw err; }
+    const coords = trimSpurs(rt.coords);
+    const distance = pathLength(coords);
+    const cand = {
+      coords, distance, bearing, dashed:false, engine:"brouter",
+      ascend: rt.ascend * (rt.distance ? Math.min(1, distance/rt.distance) : 1),
+      pavedPct: rt.pavedPct, unpavedPct: rt.unpavedPct, ferryM: rt.ferryM
+    };
+    cand.q = roundness(cand.coords);
+    cand.overlap = overlapRatio(cand.coords, cand.distance);
+    cand.wet = cand.ferryM > 0 || maxJump(rt.coords) > 450;
+    if (!best || Math.abs(cand.distance - targetM) < Math.abs(best.distance - targetM)) best = cand;
+    const ratio = targetM / cand.distance;
+    if (Math.abs(1 - ratio) < 0.04) break;        // ≤4 % Abweichung → passt
+    r = Math.max(120, r * Math.min(1.5, Math.max(0.6, ratio)));
+  }
+  return best;
+}
+
+async function generateOne(start, targetM, bearing){
+  let r = Math.max(150, targetM/(2*Math.PI) * 0.85);
+  let best = null;
+  for (let i = 0; i < 4; i++){
+    const center = destPoint(start, bearing, r);
+    const backB = (bearing + 180) % 360;
+    const vias = loopVias(center, backB, 6, r);
+    const rt = await osrmRoute([start, ...vias, start]);
+    const coords = trimSpurs(rt.coords);
+    const distance = pathLength(coords);
+    const cand = { coords, distance, bearing, dashed:false };
+    cand.q = roundness(cand.coords);
+    cand.overlap = overlapRatio(cand.coords, cand.distance);
+    cand.wet = maxJump(rt.coords) > 450;
+    if (!best || Math.abs(cand.distance - targetM) < Math.abs(best.distance - targetM)) best = cand;
+    const ratio = targetM / cand.distance;
+    if (Math.abs(1 - ratio) < 0.04) break;
+    r = Math.max(120, r * Math.min(1.5, Math.max(0.6, ratio)));
+  }
+  return best;
+}
+
+async function generateLoops(){
+  if (busy) return false;
+  const targetM = (parseFloat($("genDist").value) || 5) * 1000;
+  if (targetM < 800){ toast("Bitte mindestens 1 km wählen."); return false; }
+
+  // Startpunkt: erster Kartenpunkt, sonst das Fadenkreuz (Kartenmitte)
+  let start;
+  if (waypoints.length){
+    start = waypoints[0].latlng;
+  } else {
+    if (map.getZoom() < 12){
+      toast("Zoome näher an deinen Wunschort (Suche oben links oder Standort-Knopf) — das Fadenkreuz markiert Start und Ziel.");
+      return false;
+    }
+    start = map.getCenter();
+  }
+
+  busy = true;
+  clearProposals();
+  const btn = $("genBtn");
+  btn.disabled = true;
+
+  try{
+  const dir = $("genDir").value;
+  const count = Math.max(1, Math.min(5, parseInt($("genCount").value, 10) || 3));
+  const picky = (surfacePref !== "any" || elevPref !== "any");
+  const gen = Math.min(Math.max(count + 3, 5), 8);   // immer genug Kandidaten, um Sackgassen-Runden auszusortieren
+  const bearings = [];
+  if (dir === "auto"){
+    const base = Math.random()*360;
+    for (let i = 0; i < gen; i++) bearings.push((base + i*360/gen) % 360);
+  } else {
+    for (let i = 0; i < gen; i++){
+      const spread = gen === 1 ? 0 : (i/(gen-1) - 0.5) * 120;   // gleichmäßig im ±60°-Bogen
+      bearings.push(((+dir) + spread + 360) % 360);
+    }
+  }
+  const profile = surfacePref === "trail" ? "hiking-beta" : "trekking";
+  const orsProfile = surfacePref === "trail" ? "foot-hiking" : "foot-walking";
+  const hasORS = !!(window.ORS_API_KEY || "").trim();
+
+  let done = 0;
+  const tick = ()=>{ btn.textContent = `Berechne Runden … ${done}/${bearings.length}`; };
+  tick();
+
+  let cands = null, engine = null;
+
+  // 0) OpenRouteService Round-Trip (sauberste Rundkurse) — wenn ein Schlüssel hinterlegt ist
+  if (hasORS){
+    engine = "ors";
+    const seeds = bearings.map((_, i) => Math.floor(Math.random()*100000) + i*31);
+    cands = await mapPool(seeds, 2, async (s, i)=>{
+      const pts = 4 + (i % 3);   // 4–6 Stützpunkte variieren → vielfältigere Rundkurse
+      const c = await generateOneORS(start, targetM, s, orsProfile, pts);
+      done++; tick();
+      return c;
+    });
+    if (!cands.some(Boolean)){ cands = null; engine = null; done = 0; tick(); }
+  }
+
+  // 1) BRouter (kennt Höhen, Belag, Fähren)
+  if (!cands){
+    engine = "brouter";
+    cands = await mapPool(bearings, 3, async b=>{
+      const c = await generateOneBR(start, targetM, b, profile);
+      done++; tick();
+      return c;
+    });
+  }
+  // 2) OSRM-Fußrouting
+  if (!cands.some(Boolean)){
+    engine = "osrm";
+    done = 0; tick();
+    cands = await mapPool(bearings, 3, async b=>{
+      const c = await generateOne(start, targetM, b);
+      done++; tick();
+      return c;
+    });
+  }
+  // 3) geometrischer Kreis (offline-Notnagel)
+  if (!cands.some(Boolean)){
+    engine = "geo";
+    cands = bearings.map(b => geometricLoop(start, targetM, b));
+  }
+
+  let list = cands.filter(Boolean);
+
+  // See-/Fähren-Schutz: nasse Kandidaten raus, solange Alternativen existieren
+  const dryList = list.filter(c => !c.wet);
+  if (dryList.length) list = dryList;
+
+  // Sackgassen-Schutz: stark verspurte Runden raus, solange sauberere existieren
+  const cleanList = list.filter(c => (c.overlap || 0) < 0.22);
+  if (cleanList.length) list = cleanList;
+
+  // Bewertung: wenig Doppel-Wege, echte Schleifenform, Distanztreue, dann Wünsche
+  if (engine !== "geo"){
+    const score = c =>
+      (c.overlap || 0) * 140 +
+      (1 - (c.q || 0)) * 40 +
+      Math.abs(c.distance - targetM)/targetM * 30 +
+      (c.wet ? 80 : 0) +
+      (engine === "brouter" ? (
+        (surfacePref === "paved" ? -c.pavedPct   : 0) +
+        (surfacePref === "trail" ? -c.unpavedPct : 0)
+      ) : 0) +
+      ((engine === "brouter" || engine === "ors") ? (
+        (elevPref === "flat"  ?  (c.ascend||0)/2 : 0) +
+        (elevPref === "hilly" ? -(c.ascend||0)/2 : 0)
+      ) : 0);
+    list.sort((a,b)=>score(a)-score(b));
+  }
+  list = list.slice(0, count);
+
+  const letters = ["A","B","C","D","E"];
+  list.forEach((p, i)=>{
+    p.letter = letters[i];
+    p.start = start;
+    p.line = L.polyline(p.coords, {
+      color:"#c44524", weight:4, opacity:.35,
+      dashArray: p.dashed ? "10 8" : null, lineJoin:"round", lineCap:"round"
+    }).addTo(map);
+    p.line.on("click", ()=>selectProposal(i));
+    proposals.push(p);
+  });
+  renderProposals();
+
+  if (engine !== "brouter" && engine !== "ors" && picky)
+    toast("Belag- und Höhenwünsche brauchen den Routing-Dienst — hier nicht erreichbar, Vorschläge daher ohne Filter.");
+  else if (engine === "ors" && surfacePref === "paved")
+    {/* ORS-Profil deckt Asphalt bereits ab */}
+  if (engine === "geo") warnOnceFallback();
+
+  if (proposals.length){
+    map.fitBounds(L.latLngBounds(proposals.flatMap(p => p.coords)), { padding:[56,56] });
+    selectProposal(0);
+    const word = proposals.length === 1 ? "Schleife" : "Schleifen";
+    if (engine === "ors")
+      toast(`${proposals.length} ${word} als echte Rundkurse erstellt — wähle eine aus.`);
+    else if (engine === "brouter")
+      toast(`${proposals.length} ${word} entlang echter Wege — sortiert nach Rundheit, Distanztreue und deinen Wünschen.`);
+    else if (engine === "osrm")
+      toast(`${proposals.length} ${word} entlang von Wegen erstellt — wähle eine aus.`);
+    else
+      toast(`${proposals.length} geometrische ${word} erstellt (Routing nicht erreichbar).`);
+  }
+  }catch(err){
+    toast("Beim Erstellen der Runden ist etwas schiefgelaufen — bitte erneut versuchen.");
+  }finally{
+    btn.textContent = proposals.length ? "Andere Runden vorschlagen" : genButtonLabel();
+    btn.disabled = false;
+    busy = false;
+    refresh();
+  }
+  return proposals.length > 0;
+}
+
+function genButtonLabel(){
+  const c = Math.max(1, Math.min(5, parseInt($("genCount").value, 10) || 3));
+  return `${c} ${c === 1 ? "Runde" : "Runden"} vorschlagen`;
+}
+
+function selectProposal(i){
+  proposals.forEach((p, k)=>{
+    const sel = k === i;
+    p.line.setStyle({ opacity: sel ? .95 : .3, weight: sel ? 5 : 4 });
+    const card = $("props").children[k];
+    if (card) card.setAttribute("aria-selected", sel);
+  });
+}
+
+function renderProposals(){
+  const box = $("props");
+  box.innerHTML = "";
+  proposals.forEach((p, i)=>{
+    const el = document.createElement("div");
+    el.className = "prop";
+    el.setAttribute("aria-selected", "false");
+    el.innerHTML = `
+      <span class="tag">${p.letter}</span>
+      <div class="meta">
+        <b>${fmtKm(p.distance)} km</b>
+        <span>${
+          p.engine === "ors"
+            ? `Rundkurs · ${Math.round(p.ascend)} hm`
+            : p.engine === "brouter"
+              ? `${bearingText(p.bearing)} · ${Math.round(p.ascend)} hm · ${surfacePref === "paved" ? p.pavedPct + " % Asphalt" : p.unpavedPct + " % Wald/Trail"}`
+              : `${bearingText(p.bearing)} · ${p.dashed ? "Luftlinie" : "entlang von Wegen"}`
+        }</span>
+      </div>
+      <button class="use">Übernehmen</button>`;
+    el.addEventListener("click", ()=>selectProposal(i));
+    el.querySelector(".use").addEventListener("click", ev=>{
+      ev.stopPropagation();
+      adoptProposal(i);
+    });
+    box.appendChild(el);
+  });
+}
+
+function adoptProposal(i){
+  const p = proposals[i];
+  clearAll(true);
+  const marker = makeMarker(p.start, 0);
+  waypoints.push({ latlng: p.start, marker });
+  const seg = { coords: p.coords, distance: p.distance, dashed: p.dashed };
+  drawSegment(seg);
+  segments.push(seg);
+  clearProposals();
+  if (!$("routeName").value.trim())
+    $("routeName").value = `Runde ${(p.distance/1000).toLocaleString("de-DE",{maximumFractionDigits:1})} km`;
+  dirty = true;
+  refresh();
+  fitRoute();
+  toast(`Runde übernommen: ${fmtKm(p.distance)} km${(p.engine === "brouter" || p.engine === "ors") ? ` · ${Math.round(p.ascend)} hm` : ""}. Speichern oder als GPX exportieren.`);
+}
+
+$("genBtn").addEventListener("click", generateLoops);
+
+$("genCount").addEventListener("input", ()=>{
+  if (!proposals.length) $("genBtn").textContent = genButtonLabel();
+});
+$("genCount").addEventListener("change", ()=>{
+  let v = parseInt($("genCount").value, 10);
+  if (!isFinite(v)) v = 3;
+  $("genCount").value = Math.max(1, Math.min(5, v));
+  if (!proposals.length) $("genBtn").textContent = genButtonLabel();
+});
+
+function setSurfacePref(p){
+  surfacePref = p;
+  document.querySelectorAll("[data-surf]").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.surf === p)));
+}
+function setElevPref(p){
+  elevPref = p;
+  document.querySelectorAll("[data-elev]").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.elev === p)));
+}
+function setGenDist(km){
+  km = Math.max(1, Math.min(60, km));
+  $("genDist").value = Math.round(km * 10) / 10;
+}
+function setGenDir(v){ $("genDir").value = v; }
+function setGenCount(n){
+  n = Math.max(1, Math.min(5, Math.round(n)));
+  $("genCount").value = n;
+  if (!proposals.length) $("genBtn").textContent = genButtonLabel();
+}
+document.querySelectorAll("[data-surf]").forEach(b=>{
+  b.addEventListener("click", ()=> setSurfacePref(b.dataset.surf));
+});
+document.querySelectorAll("[data-elev]").forEach(b=>{
+  b.addEventListener("click", ()=> setElevPref(b.dataset.elev));
+});
+
+/* ================= Standort & Suche ================= */
+function getPosition(){
+  return new Promise((res, rej)=>{
+    if (!navigator.geolocation) return rej(new Error("nogeo"));
+    navigator.geolocation.getCurrentPosition(
+      p => res(L.latLng(p.coords.latitude, p.coords.longitude)),
+      rej, { enableHighAccuracy:true, timeout:9000, maximumAge:30000 }
+    );
+  });
+}
+function showUser(latlng){
+  if (userMarker) map.removeLayer(userMarker);
+  userMarker = L.marker(latlng, {
+    icon: L.divIcon({ className:"", html:'<div class="pulse"></div>', iconSize:[16,16], iconAnchor:[8,8] }),
+    keyboard:false, interactive:false
+  }).addTo(map);
+}
+async function centerOnUser(announce = true){
+  try{
+    const c = await getPosition();
+    showUser(c);
+    map.setView(c, 15);
+    if (announce) toast("Karte auf deinen Standort zentriert.");
+    return c;
+  }catch{
+    if (announce) toast("Standort hier nicht verfügbar — nutze die Ortssuche oben links oder erlaube den Zugriff im Browser.");
+    return null;
+  }
+}
+$("locBtn").addEventListener("click", ()=>centerOnUser());
+$("locStartBtn").addEventListener("click", async ()=>{
+  const c = await centerOnUser(false);
+  if (c) addPoint(c);
+  else toast("Standort hier nicht verfügbar — nutze die Ortssuche und tippe deinen Start auf die Karte.");
+});
+centerOnUser(false);
+
+async function searchPlace(){
+  const q = $("searchInput").value.trim();
+  if (!q) return;
+  toast("Suche „" + q + "“ …");
+  try{
+    const res = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(q),
+                            { headers:{ "Accept-Language":"de" } });
+    const data = await res.json();
+    if (data && data[0]){
+      map.setView([+data[0].lat, +data[0].lon], 15);
+      toast(data[0].display_name.split(",").slice(0,2).join(","));
+    } else {
+      toast("Kein Ort gefunden — versuche es genauer, z. B. mit Stadt.");
+    }
+  }catch{
+    toast("Suche hier nicht erreichbar — verschiebe die Karte von Hand.");
+  }
+}
+$("searchBtn").addEventListener("click", searchPlace);
+$("searchInput").addEventListener("keydown", e => { if (e.key === "Enter") searchPlace(); });
+
+/* ================= Statistik & UI ================= */
+function refresh(){
+  const meters = totalMeters();
+  const km = meters/1000;
+  const pace = +$("pace").value;
+  const weight = +$("weight").value || 70;
+
+  const distEl = $("distOut");
+  distEl.innerHTML = fmtKm(meters) + "<small>km</small>";
+  distEl.classList.remove("tick"); void distEl.offsetWidth; distEl.classList.add("tick");
+
+  $("timeOut").textContent = fmtDur(km * pace);
+  $("kcalOut").textContent = Math.round(weight * km * 1.036).toLocaleString("de-DE");
+  $("ptsOut").textContent  = waypoints.length;
+
+  const has = waypoints.length > 0, hasRoute = segments.length > 0;
+  $("undoBtn").disabled = !has;
+  $("clearBtn").disabled = !has;
+  $("loopBtn").disabled = waypoints.length < 2;
+  $("reverseBtn").disabled = waypoints.length < 2;
+  $("gpxBtn").disabled = !hasRoute;
+  $("saveBtn").disabled = !hasRoute;
+  $("shareBtn").disabled = !hasRoute;
+  $("mapHint").style.display = (has || proposals.length) ? "none" : "flex";
+  $("crosshair").style.display = (has || proposals.length) ? "none" : "flex";
+}
+$("pace").addEventListener("input", ()=>{ $("paceOut").textContent = fmtPace(+$("pace").value); refresh(); });
+$("weight").addEventListener("input", refresh);
+
+function setMode(mode){
+  routeMode = mode;
+  $("modeWalk").setAttribute("aria-pressed", mode === "walk");
+  $("modeDirect").setAttribute("aria-pressed", mode === "direct");
+  toast(mode === "walk" ? "Neue Abschnitte folgen Wegen und Straßen."
+                        : "Neue Abschnitte verlaufen als Luftlinie (gestrichelt).");
+}
+$("modeWalk").addEventListener("click", ()=>setMode("walk"));
+$("modeDirect").addEventListener("click", ()=>setMode("direct"));
+
+$("undoBtn").addEventListener("click", undoPoint);
+$("clearBtn").addEventListener("click", async ()=>{
+  if (dirty && segments.length){
+    const ok = await ask("Die aktuelle Strecke ist nicht gespeichert. Wirklich leeren?", "Leeren");
+    if (!ok) return;
+  }
+  clearProposals();
+  clearAll();
+});
+$("loopBtn").addEventListener("click", closeLoop);
+$("reverseBtn").addEventListener("click", reverseRoute);
+$("fitBtn").addEventListener("click", fitRoute);
+
+/* ================= Neue Strecke ================= */
+$("newBtn").addEventListener("click", async ()=>{
+  if (dirty && segments.length){
+    const ok = await ask("Die aktuelle Strecke ist nicht gespeichert — trotzdem neu beginnen?", "Neu beginnen");
+    if (!ok) return;
+  }
+  clearProposals();
+  clearAll(true);
+  $("routeName").value = "";
+  toast("Neue Strecke — tippe deinen Startpunkt oder generiere eine Runde.");
+});
+
+/* ================= Speichern / Konto ================= */
+function routeSnapshot(){
+  return {
+    id: newId(),
+    name: $("routeName").value.trim() || "Strecke " + (savedRoutes.length + 1),
+    meters: totalMeters(),
+    ts: Date.now(),
+    waypoints: waypoints.map(w => [w.latlng.lat, w.latlng.lng]),
+    segments: segments.map(s => ({
+      dashed: s.dashed,
+      distance: s.distance,
+      coords: s.coords.map(c => [c.lat, c.lng])
+    }))
+  };
+}
+
+$("saveBtn").addEventListener("click", async ()=>{
+  const r = routeSnapshot();
+  const btn = $("saveBtn");
+  btn.disabled = true;
+  try{
+    if (user && window.cloudSave){
+      r.id = await window.cloudSave(r);
+      savedRoutes.unshift(r);
+    } else {
+      savedRoutes.unshift(r);
+      persistLocal();
+    }
+    renderSaved();
+    toast(`„${r.name}” gespeichert.`);
+  }catch{
+    toast("Speichern fehlgeschlagen — bitte erneut versuchen.");
+  }finally{
+    btn.disabled = false;
+    refresh();
+  }
+});
+
+function renderSaved(){
+  const box = $("savedList");
+  box.innerHTML = "";
+  if (!savedRoutes.length){
+    const p = document.createElement("p");
+    p.className = "saved-empty";
+    p.textContent = user
+      ? "Noch keine Strecken in deinem Konto. Speichere eine Runde — sie ist dann auf allen Geräten verfügbar."
+      : (window.FIREBASE_CONFIG
+          ? "Noch keine Strecken. Ohne Anmeldung bleiben sie auf diesem Gerät gespeichert — mit Google-Anmeldung oben in deinem Konto auf allen Geräten."
+          : "Noch keine Strecken. Sie bleiben auf diesem Gerät gespeichert; exportiere zusätzlich als GPX für Uhr & Apps.");
+    box.appendChild(p);
+    return;
+  }
+  savedRoutes.forEach((r)=>{
+    const el = document.createElement("div");
+    el.className = "saved-item";
+    el.innerHTML = `
+      <span class="badge"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17a4 4 0 0 1 4-4h8a4 4 0 0 0 0-8H9"/><circle cx="4" cy="17" r="1.6" fill="currentColor" stroke="none"/></svg></span>
+      <div class="meta"><b></b><span>${fmtKm(r.meters)} km${r.ts ? " · " + new Date(r.ts).toLocaleDateString("de-DE") : ""}</span></div>
+      <button data-act="load">Laden</button>
+      <button data-act="del" class="del" aria-label="Löschen">✕</button>`;
+    el.querySelector("b").textContent = r.name;
+    el.querySelector('[data-act=load]').addEventListener("click", ()=>loadRoute(r));
+    el.querySelector('[data-act=del]').addEventListener("click", async (ev)=>{
+      ev.currentTarget.disabled = true;
+      const ok = await ask(`„${r.name}” wirklich löschen?`, "Löschen");
+      if (!ok){ renderSaved(); return; }
+      try{
+        if (user && window.cloudDelete && r.id) await window.cloudDelete(r.id);
+        const idx = savedRoutes.indexOf(r);
+        if (idx >= 0) savedRoutes.splice(idx,1);
+        if (!user) persistLocal();
+        renderSaved();
+        toast(`„${r.name}” gelöscht.`);
+      }catch{
+        toast("Löschen fehlgeschlagen — bitte erneut versuchen.");
+      }
+    });
+    box.appendChild(el);
+  });
+  renderAccount();
+}
+
+function applyRoute(r){
+  clearProposals();
+  clearAll(true);
+  $("routeName").value = r.name || "";
+  (r.waypoints || []).forEach(([lat,lng], idx)=>{
+    const latlng = L.latLng(lat,lng);
+    const marker = makeMarker(latlng, idx);
+    waypoints.push({ latlng, marker });
+  });
+  (r.segments || []).forEach(s=>{
+    const seg = { dashed:s.dashed, distance:s.distance, coords:(s.coords||[]).map(([lat,lng]) => L.latLng(lat,lng)) };
+    drawSegment(seg);
+    segments.push(seg);
+  });
+  dirty = false;
+  refresh();
+  fitRoute();
+}
+
+async function loadRoute(r){
+  if (dirty && segments.length){
+    const ok = await ask("Die aktuelle Strecke ist nicht gespeichert — trotzdem laden?", "Laden");
+    if (!ok) return;
+  }
+  applyRoute(r);
+  toast(`„${r.name}” geladen.`);
+}
+
+/* --- Konto-Anbindung (wird vom Firebase-Block unten bedient) --- */
+let authResolved = false;   // true, sobald Firebase den Anmeldestatus gemeldet hat
+let cloudFailed = false;    // true, wenn die Cloud gar nicht laden konnte
+let signInFlight = false;
+function updateAuthUI(){
+  const cfg = !!window.FIREBASE_CONFIG;
+  $("authBtn").hidden  = !cfg || !authResolved || !!user;
+  $("authUser").hidden = !user;
+  if (user){
+    $("authName").textContent = (user.name || "Konto").split(" ")[0];
+    const img = $("authImg");
+    if (user.photo){ img.src = user.photo; img.referrerPolicy = "no-referrer"; img.hidden = false; }
+    else img.hidden = true;
+  }
+  renderAccount();
+}
+async function doSignIn(){
+  if (cloudFailed){ toast("Anmeldung hier nicht verfügbar — bitte die Seite auf deiner Netlify-Adresse öffnen (nicht in der Vorschau)."); return; }
+  if (!window.cloudSignIn){ toast("Anmeldung lädt noch — einen Moment."); return; }
+  if (signInFlight) return;
+  signInFlight = true;
+  try{ await window.cloudSignIn(); }
+  catch(e){}
+  finally{ signInFlight = false; }
+}
+async function doSignOut(){
+  if (!window.cloudSignOut){ toast("Abmelden ist gerade nicht möglich."); return; }
+  const ok = await ask(`Als ${user ? user.name.split(" ")[0] : ""} abmelden? Deine Strecken bleiben im Konto gespeichert.`, "Abmelden");
+  if (!ok) return;
+  try{
+    await window.cloudSignOut();
+    if (user) window.__appAuth(null);   // Fallback, falls onAuthStateChanged verzögert feuert
+    toast("Abgemeldet.");
+  }catch(e){
+    toast("Abmelden fehlgeschlagen — bitte erneut versuchen.");
+  }
+}
+$("authBtn").addEventListener("click", doSignIn);
+$("authUser").addEventListener("click", doSignOut);
+
+window.__appAuth = async function(u){
+  const wasUser = !!user;
+  user = u;
+  authResolved = true;
+  updateAuthUI();
+  // Beim Abmelden ein evtl. eingeblendetes Geteilt-Banner zurücksetzen
+  if (!u && wasUser){ const sb = $("sharedBanner"); if (sb) sb.style.display = "none"; }
+  if (u){
+    // Lokale Strecken einmalig ins Konto übernehmen (nur erfolgreich übertragene danach lokal entfernen)
+    const local = loadLocalRoutes();
+    if (local.length && window.cloudSave){
+      toast(`Übernehme ${local.length} lokale Strecke${local.length === 1 ? "" : "n"} in dein Konto …`);
+      const rest = [];
+      for (const r of local){
+        try{ await window.cloudSave(r); }catch{ rest.push(r); }
+      }
+      try{
+        if (rest.length) localStorage.setItem(LS_KEY, JSON.stringify(rest));
+        else localStorage.removeItem(LS_KEY);
+      }catch{}
+    }
+    if (window.cloudList){
+      try{
+        savedRoutes = await window.cloudList();
+        toast(`Angemeldet als ${u.name.split(" ")[0]} — ${savedRoutes.length} Strecke${savedRoutes.length === 1 ? "" : "n"} geladen.`);
+      }catch{
+        savedRoutes = [];
+        toast("Konto verbunden, Strecken konnten aber nicht geladen werden.");
+      }
+    }
+  } else {
+    savedRoutes = loadLocalRoutes();
+  }
+  renderSaved();
+};
+
+// Wird vom Firebase-Block gerufen, wenn die Cloud gar nicht laden konnte
+window.__appCloudFailed = function(){
+  cloudFailed = true;
+  authResolved = true;
+  updateAuthUI();
+};
+
+/* ================= GPX Export / Import ================= */
+function fullPath(){
+  const pts = [];
+  segments.forEach(seg=>{
+    seg.coords.forEach((c,i)=>{
+      if (pts.length && i === 0) return;
+      pts.push(c);
+    });
+  });
+  return pts;
+}
+
+$("gpxBtn").addEventListener("click", ()=>{
+  const name = $("routeName").value.trim() || "Joggingstrecke";
+  const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const pts = fullPath()
+    .map(c => `      <trkpt lat="${c.lat.toFixed(6)}" lon="${c.lng.toFixed(6)}"></trkpt>`)
+    .join("\n");
+  const gpx =
+`<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Streckenwerk" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>${esc(name)}</name></metadata>
+  <trk>
+    <name>${esc(name)}</name>
+    <trkseg>
+${pts}
+    </trkseg>
+  </trk>
+</gpx>`;
+  try{
+    const blob = new Blob([gpx], { type:"application/gpx+xml" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name.replace(/[^\wäöüÄÖÜß\- ]+/g,"").replace(/\s+/g,"_") + ".gpx";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+    toast("GPX exportiert — lässt sich z. B. in Komoot, Strava oder auf Sportuhren laden.");
+  }catch{
+    toast("Download hier blockiert — öffne die Seite im Browser und exportiere dort.");
+  }
+});
+
+$("importBtn").addEventListener("click", ()=>$("gpxFile").click());
+$("gpxFile").addEventListener("change", async e=>{
+  const file = e.target.files[0];
+  if (!file) return;
+  try{
+    const xml = new DOMParser().parseFromString(await file.text(), "application/xml");
+    const trkpts = [...xml.getElementsByTagName("trkpt")];
+    const rtepts = trkpts.length ? trkpts : [...xml.getElementsByTagName("rtept")];
+    const coords = rtepts.map(p => L.latLng(+p.getAttribute("lat"), +p.getAttribute("lon")))
+                         .filter(c => isFinite(c.lat) && isFinite(c.lng));
+    if (coords.length < 2) throw new Error("leer");
+    clearProposals();
+    clearAll(true);
+    const nameEl = xml.querySelector("trk > name, metadata > name");
+    if (nameEl) $("routeName").value = nameEl.textContent.slice(0,32);
+    const mS = makeMarker(coords[0], 0);
+    waypoints.push({ latlng: coords[0], marker: mS });
+    const mE = makeMarker(coords[coords.length-1], 1);
+    waypoints.push({ latlng: coords[coords.length-1], marker: mE });
+    const seg = { coords, distance: pathLength(coords), dashed:false };
+    drawSegment(seg);
+    segments.push(seg);
+    dirty = true;
+    refresh();
+    fitRoute();
+    toast(`GPX importiert: ${fmtKm(seg.distance)} km.`);
+  }catch{
+    toast("Diese GPX-Datei konnte nicht gelesen werden.");
+  }finally{
+    e.target.value = "";
+  }
+});
+
+/* ================= Teilen / Veröffentlichen ================= */
+async function shareCurrentRoute(){
+  if (!segments.length){ toast("Erst eine Strecke erstellen oder generieren."); return; }
+  if (!window.FIREBASE_CONFIG || !window.cloudPublish){
+    toast("Teilen braucht die Konto-Anbindung — bitte die App auf deiner Netlify-Adresse öffnen.");
+    return;
+  }
+  if (!user){
+    toast("Zum Veröffentlichen bitte oben mit Google anmelden.");
+    return;
+  }
+  const btn = $("shareBtn");
+  const label = btn.innerHTML;
+  btn.disabled = true; btn.textContent = "Veröffentliche …";
+  try{
+    const r = routeSnapshot();
+    const id = await window.cloudPublish(r);
+    const url = location.origin + location.pathname + "?route=" + id;
+    $("shareName").textContent = `„${r.name}”`;
+    $("shareUrl").value = url;
+    $("shareNative").style.display = navigator.share ? "" : "none";
+    $("shareModal").hidden = false;
+  }catch(e){
+    toast("Veröffentlichen fehlgeschlagen — bitte erneut versuchen.");
+  }finally{
+    btn.disabled = false; btn.innerHTML = label;
+    refresh();
+  }
+}
+$("shareBtn").addEventListener("click", shareCurrentRoute);
+$("shareClose").addEventListener("click", ()=>{ $("shareModal").hidden = true; });
+$("shareModal").addEventListener("click", e=>{ if (e.target === $("shareModal")) $("shareModal").hidden = true; });
+document.addEventListener("keydown", e=>{ if (e.key === "Escape" && !$("shareModal").hidden) $("shareModal").hidden = true; });
+$("shareCopy").addEventListener("click", async ()=>{
+  const url = $("shareUrl").value;
+  try{ await navigator.clipboard.writeText(url); toast("Link kopiert."); }
+  catch{
+    const el = $("shareUrl"); el.focus(); el.select();
+    try{ document.execCommand("copy"); toast("Link kopiert."); }catch{ toast("Bitte den Link von Hand kopieren."); }
+  }
+});
+$("shareNative").addEventListener("click", async ()=>{
+  const url = $("shareUrl").value;
+  if (navigator.share){
+    try{ await navigator.share({ title:"Streckenwerk", text:"Schau dir meine Laufrunde an:", url }); }catch{}
+  } else {
+    $("shareCopy").click();
+  }
+});
+
+let sharedRouteData = null;
+function showSharedBanner(r){
+  sharedRouteData = r;
+  $("sharedText").textContent = r.ownerName
+    ? `Geteilte Route von ${r.ownerName.split(" ")[0]} · ${fmtKm(r.meters)} km`
+    : `Geteilte Route · ${fmtKm(r.meters)} km`;
+  $("sharedBanner").style.display = "flex";
+}
+$("sharedClose").addEventListener("click", ()=>{ $("sharedBanner").style.display = "none"; });
+$("sharedSave").addEventListener("click", ()=>{ $("saveBtn").click(); $("sharedBanner").style.display = "none"; });
+
+function loadSharedRoute(r){
+  applyRoute(r);
+  showSharedBanner(r);
+  // ?route=… aus der Adresse entfernen, damit ein Neuladen nicht erneut die geteilte Route öffnet
+  try{ history.replaceState({}, "", location.pathname); }catch{}
+  toast(`Geteilte Route geladen${r.ownerName ? " von " + r.ownerName.split(" ")[0] : ""}.`);
+}
+
+// Wird vom Firebase-Block aufgerufen, sobald die Cloud bereit ist
+window.__appCloudReady = async function(){
+  const id = new URLSearchParams(location.search).get("route");
+  if (!id || !window.cloudGetShared) return;
+  try{
+    const r = await window.cloudGetShared(id);
+    if (r && (r.segments || []).length) loadSharedRoute(r);
+    else toast("Geteilte Route nicht gefunden — vielleicht wurde sie entfernt.");
+  }catch{
+    toast("Geteilte Route konnte nicht geladen werden.");
+  }
+};
+
+/* ================= Tabs, Konto, Statistiken, Ziele ================= */
+function showTab(which){
+  const plan = which === "plan";
+  $("tabPlan").hidden = !plan;
+  $("tabAccount").hidden = plan;
+  $("tabBtnPlan").setAttribute("aria-selected", String(plan));
+  $("tabBtnAccount").setAttribute("aria-selected", String(!plan));
+  if (!plan) renderAccount();
+}
+$("tabBtnPlan").addEventListener("click", ()=>showTab("plan"));
+$("tabBtnAccount").addEventListener("click", ()=>showTab("account"));
+
+const GOAL_KEY = "streckenwerk_goal_v1";
+function loadGoal(){ const v = parseFloat(localStorage.getItem(GOAL_KEY)); return isFinite(v) ? v : 20; }
+function saveGoal(v){ try{ localStorage.setItem(GOAL_KEY, String(v)); }catch{} }
+
+function renderAccount(){
+  // Profil / Anmeldung
+  const box = $("accountBox");
+  if (box){
+    if (user){
+      box.innerHTML = `
+        <div class="acct">
+          ${user.photo ? `<img id="acctImg" alt="" referrerpolicy="no-referrer">` :
+            `<span class="ai"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span>`}
+          <div class="info"><b></b><span>In deinem Konto gespeichert · auf allen Geräten</span></div>
+          <button class="btn" id="acctSignOut" style="white-space:nowrap">Abmelden</button>
+        </div>`;
+      box.querySelector(".info b").textContent = user.name || "Konto";
+      if (user.photo){ const im = box.querySelector("#acctImg"); im.src = user.photo; }
+      box.querySelector("#acctSignOut").addEventListener("click", doSignOut);
+    } else {
+      const cfg = !!window.FIREBASE_CONFIG;
+      box.innerHTML = `
+        <div class="acct">
+          <span class="ai"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span>
+          <div class="info"><b>Nicht angemeldet</b><span>${cfg ? "Strecken auf diesem Gerät" : "Konto in dieser Version nicht aktiv"}</span></div>
+          ${cfg ? `<button class="btn primary" id="acctSignIn" style="white-space:nowrap">Anmelden</button>` : ""}
+        </div>`;
+      const si = box.querySelector("#acctSignIn");
+      if (si) si.addEventListener("click", doSignIn);
+    }
+  }
+
+  // Statistiken aus gespeicherten Strecken
+  const grid = $("statsGrid");
+  if (grid){
+    const n = savedRoutes.length;
+    const totalM = savedRoutes.reduce((s,r)=>s+(r.meters||0), 0);
+    const longest = savedRoutes.reduce((m,r)=>Math.max(m, r.meters||0), 0);
+    const avg = n ? totalM/n : 0;
+    const pace = +$("pace").value || 360;
+    const totalSec = (totalM/1000) * pace;
+    const hours = totalSec/3600;
+    grid.innerHTML = `
+      <div class="stat"><b>${n}</b><span>Strecken</span></div>
+      <div class="stat"><b>${fmtKm(totalM)}<small>km</small></b><span>Gesamt</span></div>
+      <div class="stat"><b>${fmtKm(longest)}<small>km</small></b><span>Längste</span></div>
+      <div class="stat"><b>${fmtKm(avg)}<small>km</small></b><span>Ø Runde</span></div>
+      <div class="stat wide"><b>${hours >= 1 ? hours.toFixed(1) : Math.round(totalSec/60)}<small>${hours >= 1 ? "h" : "min"}</small></b><span>Gesamte Laufzeit bei ${fmtPace(pace).replace("\u00A0"," ")}</span></div>`;
+  }
+
+  // Wochenziel: Summe der diese Woche (letzte 7 Tage) gespeicherten Strecken
+  const goal = loadGoal();
+  if ($("goalKm") && document.activeElement !== $("goalKm")) $("goalKm").value = goal;
+  const weekAgo = Date.now() - 7*86400000;
+  const weekM = savedRoutes.filter(r => (r.ts||0) >= weekAgo).reduce((s,r)=>s+(r.meters||0), 0);
+  const weekKm = weekM/1000;
+  const pct = goal > 0 ? Math.min(100, Math.round(100*weekKm/goal)) : 0;
+  const fill = $("goalFill");
+  if (fill){ fill.style.width = pct + "%"; fill.classList.toggle("done", goal > 0 && weekKm >= goal); }
+  const gt = $("goalText");
+  if (gt){
+    gt.textContent = goal > 0
+      ? `${weekKm.toLocaleString("de-DE",{maximumFractionDigits:1})} von ${goal} km diese Woche geplant (${pct} %).`
+      : "Setze ein Wochenziel, um deinen geplanten Umfang zu verfolgen.";
+  }
+}
+$("goalKm").addEventListener("input", ()=>{
+  let v = parseFloat($("goalKm").value);
+  if (!isFinite(v) || v < 0) v = 0;
+  saveGoal(v);
+  renderAccount();
+});
+
+/* ================= Routen-Assistent (Chat) ================= */
+const chatWin = $("chatWin");
+let chatOpened = false;
+
+function chatAdd(text, who){
+  const el = document.createElement("div");
+  el.className = "msg " + (who === "user" ? "user" : "bot");
+  el.textContent = text;
+  $("chatMsgs").appendChild(el);
+  $("chatMsgs").scrollTop = $("chatMsgs").scrollHeight;
+  return el;
+}
+function openChat(){
+  chatWin.hidden = false;
+  $("chatFab").style.display = "none";
+  if (!chatOpened){
+    chatOpened = true;
+    const ai = aiEnabled();
+    chatAdd(ai
+      ? "Hoi! Ich bin dein KI-Routen-Assistent. Schreib mir frei, was du laufen willst — z. B. „mach die Runde etwas kürzer, lieber im Wald, und zeig mir drei Varianten” oder frag „wie viele Höhenmeter hat die Runde?”. Ich passe die Strecke direkt an."
+      : "Hoi! Ich bin dein Routen-Assistent. Sag mir, was du laufen willst — z. B. „5 km flache Runde”, „2 km länger”, „mehr Wald”, „andere Runde” oder „umkehren”. Tippe „Hilfe” für alles, was ich kann.", "bot");
+    renderChips(["5 km Runde","2 km länger","flacher","mehr Wald","andere Runde"]);
+  }
+  setTimeout(()=>$("chatText").focus(), 50);
+}
+function closeChat(){ chatWin.hidden = true; $("chatFab").style.display = "flex"; }
+$("chatFab").addEventListener("click", openChat);
+$("chatClose").addEventListener("click", closeChat);
+
+function renderChips(list){
+  const box = $("chatChips");
+  box.innerHTML = "";
+  list.forEach(label=>{
+    const c = document.createElement("button");
+    c.className = "chip";
+    c.textContent = label;
+    c.addEventListener("click", ()=>{ $("chatText").value = label; sendChat(); });
+    box.appendChild(c);
+  });
+}
+
+const WORD_NUM = { ein:1, eine:1, eins:1, zwei:2, drei:3, vier:4, fünf:5, sechs:6, sieben:7, acht:8, neun:9, zehn:10, elf:11, zwölf:12, fünfzehn:15, zwanzig:20 };
+function parseNum(t){
+  const m = t.match(/(\d+(?:[.,]\d+)?)/);
+  if (m) return parseFloat(m[1].replace(",", "."));
+  for (const w in WORD_NUM){ if (new RegExp("\\b"+w+"\\b").test(t)) return WORD_NUM[w]; }
+  return null;
+}
+
+// Versteht getippte Anweisungen, passt Vorgaben an und erzeugt/ändert die Strecke.
+// Gibt den Antworttext zurück. Aktionen, die neu generieren, geben ein Promise zurück.
+async function routeAssistant(raw){
+  const t = raw.toLowerCase().trim();
+  if (!t) return "Sag mir einfach, was du laufen möchtest.";
+
+  // Hilfe
+  if (/\b(hilfe|help|was kannst|befehle|kommandos)\b/.test(t)){
+    return "Ich kann z. B.:\n• Distanz: „8 km”, „2 km länger”, „kürzer”, „doppelt so lang”\n• Untergrund: „mehr Wald”, „lieber Asphalt”, „egal”\n• Höhe: „flacher”, „hügeliger”, „egal”\n• Richtung: „nach Norden”, „andere Richtung”\n• Anzahl: „zeig mir 5 Runden”, „nur eine”\n• Aktionen: „andere Runde”, „umkehren”, „speichern”, „teilen”, „leeren”";
+  }
+
+  let changed = [];
+  let regen = false;
+  const cur = parseFloat($("genDist").value) || 5;
+
+  // ----- Fragen zur aktuellen Runde beantworten -----
+  if (/\?|wie (lang|weit|viel|hoch)|wieviel|wie viele|länge|distanz\b/.test(t) && !/mach|stell|setz|länger|kürzer|generier|erstell/.test(t)){
+    const km = segments.length ? totalMeters()/1000 : 0;
+    if (/höhe|höhenmeter|\bhm\b|anstieg|steig/.test(t)){
+      const sc = $("props").querySelector('[aria-selected="true"]');
+      const pi = sc ? Array.from($("props").children).indexOf(sc) : 0;
+      const p = proposals[pi] || proposals[0] || null;
+      if (p && p.ascend != null) return `Die gewählte Runde hat etwa ${Math.round(p.ascend)} Höhenmeter.`;
+      return "Höhenmeter sehe ich erst, wenn eine Runde erzeugt und gewählt ist (mit OpenRouteService oder BRouter).";
+    }
+    if (/vorschläge|optionen|varianten|wie viele runden/.test(t))
+      return proposals.length ? `Aktuell ${proposals.length} Vorschläge auf der Karte.` : "Im Moment gibt es keine Vorschläge — nenn mir z. B. eine Wunschdistanz.";
+    if (/lang|weit|viel|länge|distanz|km/.test(t)){
+      if (km > 0) return `Die aktuelle Strecke ist ${fmtKm(km*1000)} km lang.`;
+      return `Es ist noch keine Strecke übernommen. Eingestellte Wunschdistanz: ${cur} km.`;
+    }
+  }
+
+  // ----- Aktionen auf der aktuellen Strecke (ohne Neugenerierung) -----
+  if (/umkehr|andersrum|gegenrichtung|rückwärts/.test(t)){
+    if (segments.length && !proposals.length){ await reverseRoute(); return "Erledigt — die Strecke läuft jetzt andersrum."; }
+    return "Dafür brauche ich zuerst eine übernommene Strecke. Erzeuge eine Runde und übernimm sie.";
+  }
+  if (/speicher|sicher|merk/.test(t)){
+    if (!$("saveBtn").disabled){ $("saveBtn").click(); return "Strecke gespeichert."; }
+    return "Es gibt noch keine fertige Strecke zum Speichern.";
+  }
+  if (/teil|share|link/.test(t)){
+    if (!$("shareBtn").disabled){ shareCurrentRoute(); return "Ich öffne das Teilen-Fenster …"; }
+    return "Erzeuge oder übernimm zuerst eine Strecke, dann kann ich sie teilen.";
+  }
+  if (/leer|lösch|entfern|reset|zurücksetz/.test(t)){
+    clearProposals(); clearAll(true); return "Karte geleert. Sag mir, welche Runde ich als Nächstes erstellen soll.";
+  }
+  // Vorschlag übernehmen
+  const adopt = t.match(/\b(übernimm|nimm|wähl|nimm runde)?\s*(runde\s*)?\b([abcde])\b/);
+  if (proposals.length && (/\b(übernimm|nimm|wähl|übernehmen)\b/.test(t) || adopt)){
+    let idx = 0;
+    const letterMatch = t.match(/\b([abcde])\b/);
+    if (letterMatch) idx = "abcde".indexOf(letterMatch[1]);
+    if (/\b(zweite|2\.)\b/.test(t)) idx = 1;
+    if (/\b(dritte|3\.)\b/.test(t)) idx = 2;
+    idx = Math.max(0, Math.min(proposals.length - 1, idx));
+    adoptProposal(idx);
+    return `Runde ${["A","B","C","D","E"][idx]} übernommen. Du kannst sie speichern, teilen oder weiter anpassen.`;
+  }
+
+  // ----- Vorgaben anpassen -----
+  // Distanz
+  if (/(doppelt|verdoppl)/.test(t)){ setGenDist(cur*2); changed.push(`Distanz ${Math.round(cur*2*10)/10} km`); regen = true; }
+  else if (/(halb|hälfte)/.test(t)){ setGenDist(cur/2); changed.push(`Distanz ${Math.round(cur/2*10)/10} km`); regen = true; }
+  else {
+    const n = parseNum(t);
+    const longer = /\b(länger|weiter|mehr km|grösser|größer)\b/.test(t) || /\bmehr\b/.test(t) && /km|länger|distanz/.test(t);
+    const shorter = /\b(kürzer|kurz|weniger km|klein)\b/.test(t) || /\bweniger\b/.test(t) && /km|kürzer|distanz/.test(t);
+    if (n !== null && /\bkm\b|kilometer|lang|distanz|runde/.test(t) && !/höhenmeter|hm\b|optionen|vorschläge|runden/.test(t)){
+      if (longer){ setGenDist(cur + n); changed.push(`Distanz ${Math.round((cur+n)*10)/10} km`); }
+      else if (shorter){ setGenDist(cur - n); changed.push(`Distanz ${Math.round((cur-n)*10)/10} km`); }
+      else { setGenDist(n); changed.push(`Distanz ${Math.round(n*10)/10} km`); }
+      regen = true;
+    } else if (longer){ setGenDist(cur + 1); changed.push(`Distanz ${Math.round((cur+1)*10)/10} km`); regen = true; }
+    else if (shorter){ setGenDist(cur - 1); changed.push(`Distanz ${Math.round((cur-1)*10)/10} km`); regen = true; }
+  }
+
+  // Untergrund
+  if (/wald|trail|natur|schotter|feld|wiese|pfad|gelände/.test(t)){ setSurfacePref("trail"); changed.push("Untergrund Wald & Trail"); regen = true; }
+  else if (/asphalt|strasse|straße|belag|befestigt|stadt/.test(t)){ setSurfacePref("paved"); changed.push("Untergrund Asphalt"); regen = true; }
+  else if (/untergrund.*(egal|beides)|(egal|beides).*untergrund/.test(t)){ setSurfacePref("any"); changed.push("Untergrund egal"); regen = true; }
+
+  // Höhe
+  if (/flach|eben|wenig.*höh|weniger.*höh|keine.*höh/.test(t)){ setElevPref("flat"); changed.push("flach"); regen = true; }
+  else if (/hügel|hüglig|berg|steigung|anstieg|mehr.*höh|viel.*höh|höhenmeter/.test(t)){ setElevPref("hilly"); changed.push("hügelig"); regen = true; }
+  else if (/höhe.*(egal)|(egal).*höhe/.test(t)){ setElevPref("any"); changed.push("Höhe egal"); regen = true; }
+
+  // Richtung
+  if (/\bnorden?\b|nördl/.test(t)){ setGenDir("0"); changed.push("Richtung Norden"); regen = true; }
+  else if (/\bosten?\b|östl/.test(t)){ setGenDir("90"); changed.push("Richtung Osten"); regen = true; }
+  else if (/\bsüden?\b|südl/.test(t)){ setGenDir("180"); changed.push("Richtung Süden"); regen = true; }
+  else if (/\bwesten?\b|westl/.test(t)){ setGenDir("270"); changed.push("Richtung Westen"); regen = true; }
+  else if (/richtung.*(egal)|(egal).*richtung|andere richtung/.test(t)){ setGenDir("auto"); changed.push("Richtung egal"); regen = true; }
+
+  // Anzahl
+  const optN = (t.match(/(\d+)\s*(runden|vorschläge|optionen|stück|varianten)/) || [])[1];
+  if (optN){ setGenCount(parseInt(optN,10)); changed.push(`${Math.max(1,Math.min(5,+optN))} Vorschläge`); regen = true; }
+  else if (/\b(nur eine|eine runde|nur 1|einzeln)\b/.test(t)){ setGenCount(1); changed.push("1 Vorschlag"); regen = true; }
+  else if (/(mehr).*(option|vorschläge|runden|auswahl)|(option|vorschläge|runden|auswahl).*(mehr)/.test(t)){ setGenCount((parseInt($("genCount").value,10)||3)+1); changed.push("mehr Vorschläge"); regen = true; }
+
+  // Reines Neu-Generieren
+  if (!regen && /\b(andere|nochmal|neue|neu|generier|erstell|vorschlag|vorschläge|zeig|los|mach|runde)\b/.test(t)) regen = true;
+
+  if (regen){
+    showTab("plan");
+    const ok = await generateLoops();
+    if (!ok) return "Ich konnte hier keine Runde erzeugen. Suche zuerst oben einen Ort oder tippe einen Startpunkt auf die Karte — dann nochmal.";
+    const what = changed.length ? `Eingestellt: ${changed.join(", ")}. ` : "";
+    return `${what}Ich habe neue Vorschläge auf der Karte erstellt — tippe einen an oder sag „übernimm A”.`;
+  }
+
+  if (changed.length) return `Eingestellt: ${changed.join(", ")}. Sag „los”, wenn ich neue Runden erzeugen soll.`;
+  return "Das habe ich nicht ganz verstanden. Versuch z. B. „6 km flach”, „mehr Wald” oder „andere Runde”. Tippe „Hilfe” für alles.";
+}
+
+// KI aktiv, wenn ein sicherer Proxy konfiguriert ist ODER (unsicher) ein Schlüssel im Browser liegt
+function aiEnabled(){ return !!window.AI_PROXY || !!(window.AI_API_KEY || "").trim(); }
+
+// Echtes Sprachmodell. Gibt {actions, reply} zurück oder null (kein KI-Modus → eingebauter Assistent).
+async function aiInterpret(raw){
+  const key = (window.AI_API_KEY || "").trim();
+  const useProxy = !!window.AI_PROXY && !key;   // Proxy hat Vorrang, außer es ist explizit ein Direkt-Schlüssel gesetzt
+  if (!useProxy && !key) return null;
+  const state = {
+    wunschdistanz_km: parseFloat($("genDist").value) || 5,
+    untergrund: surfacePref, hoehe: elevPref,
+    richtung: $("genDir").value, anzahl_vorschlaege: parseInt($("genCount").value, 10) || 3,
+    offene_vorschlaege: proposals.length,
+    uebernommene_runde: segments.length ? { km: +(totalMeters()/1000).toFixed(2) } : null,
+    angemeldet: !!user
+  };
+  const sys =
+`Du bist der Routen-Assistent der Jogging-App „Streckenwerk". Der Nutzer schreibt Deutsch.
+Wandle seine Nachricht in Aktionen um und antworte kurz und freundlich auf Deutsch.
+Mögliche Aktionen (Feld "actions", Array):
+- {"type":"set_distance","km":Z}        Wunschdistanz 1–60 km
+- {"type":"adjust_distance","delta":Z}  Distanz ändern (+/- km)
+- {"type":"set_surface","value":"any|paved|trail"}   (Wald/Trail=trail, Asphalt/Strasse=paved)
+- {"type":"set_elevation","value":"any|flat|hilly"}  (flach=flat, hügelig=hilly)
+- {"type":"set_direction","value":"auto|N|E|S|W"}
+- {"type":"set_count","n":1..5}
+- {"type":"generate"}    neue Runden erzeugen
+- {"type":"reverse"}     übernommene Runde umkehren
+- {"type":"save"} {"type":"share"} {"type":"clear"}
+- {"type":"adopt","index":0..4}   Vorschlag A=0, B=1 …
+Regeln: Wenn du Distanz/Untergrund/Höhe/Richtung/Anzahl änderst, hänge meist {"type":"generate"} an.
+Fragen zur Runde beantwortest du im Feld "reply" anhand des Zustands (keine Aktion nötig).
+Aktueller Zustand: ${JSON.stringify(state)}.
+Antworte AUSSCHLIESSLICH mit reinem JSON: {"actions":[...],"reply":"..."} — kein Markdown, keine Code-Blöcke.`;
+  const reqBody = {
+    model: window.AI_MODEL || "claude-haiku-4-5-20251001",
+    max_tokens: 500,
+    system: sys,
+    messages: [{ role: "user", content: raw }]
+  };
+  let res;
+  if (useProxy){
+    // Sicher: Schlüssel liegt serverseitig in der Netlify-Funktion
+    res = await fetch("/.netlify/functions/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(reqBody)
+    });
+  } else {
+    // Unsicher: Direktaufruf mit im Browser hinterlegtem Schlüssel
+    res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify(reqBody)
+    });
+  }
+  if (!res.ok) throw new Error("ai " + res.status);
+  const data = await res.json();
+  const txt = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
+  const clean = txt.replace(/^```(?:json)?/i, "").replace(/```$/,"").trim();
+  return JSON.parse(clean);
+}
+
+// Vom Modell gelieferte Aktionen ausführen
+async function executeActions(j){
+  let regen = false;
+  for (const a of (j.actions || [])){
+    switch (a.type){
+      case "set_distance":     setGenDist(+a.km); regen = true; break;
+      case "adjust_distance":  setGenDist((parseFloat($("genDist").value)||5) + (+a.delta)); regen = true; break;
+      case "set_surface":      setSurfacePref(a.value); regen = true; break;
+      case "set_elevation":    setElevPref(a.value); regen = true; break;
+      case "set_direction":    setGenDir(a.value); regen = true; break;
+      case "set_count":        setGenCount(+a.n); regen = true; break;
+      case "generate":         regen = true; break;
+      case "reverse":          if (segments.length && !proposals.length) await reverseRoute(); break;
+      case "save":             if (!$("saveBtn").disabled) $("saveBtn").click(); break;
+      case "share":            if (!$("shareBtn").disabled) shareCurrentRoute(); break;
+      case "clear":            clearProposals(); clearAll(true); break;
+      case "adopt":            if (proposals.length) adoptProposal(Math.max(0, Math.min(proposals.length-1, a.index|0))); break;
+    }
+  }
+  if (regen){ showTab("plan"); await generateLoops(); }
+}
+
+let chatBusy = false;
+async function sendChat(){
+  const inp = $("chatText");
+  const text = inp.value.trim();
+  if (!text || chatBusy) return;
+  inp.value = "";
+  chatAdd(text, "user");
+  chatBusy = true;
+  const thinking = chatAdd("…", "bot");
+  try{
+    let reply;
+    let aiResult = null;
+    try{ aiResult = await aiInterpret(text); }   // echtes Modell, falls Schlüssel vorhanden
+    catch(e){ aiResult = null; }                 // bei Fehler: eingebauter Assistent
+    if (aiResult){
+      await executeActions(aiResult);
+      reply = (aiResult.reply || "Erledigt.").trim();
+    } else {
+      reply = await routeAssistant(text);        // eingebauter Assistent (ohne Schlüssel / Fallback)
+    }
+    thinking.textContent = reply;
+  }catch(e){
+    thinking.textContent = "Da ist etwas schiefgelaufen — versuch es nochmal.";
+  }finally{
+    chatBusy = false;
+    $("chatMsgs").scrollTop = $("chatMsgs").scrollHeight;
+    renderChips(proposals.length ? ["übernimm A","andere Runde","2 km länger","flacher"]
+                                 : ["5 km Runde","andere Runde","mehr Wald","flacher","umkehren"]);
+  }
+}
+$("chatSend").addEventListener("click", sendChat);
+$("chatText").addEventListener("keydown", e=>{ if (e.key === "Enter") sendChat(); });
+
+/* ================= Start ================= */
+savedRoutes = loadLocalRoutes();
+renderSaved();
+updateAuthUI();
+$("genBtn").textContent = genButtonLabel();
+refresh();
+
+// Countdown bis zum SwissCityMarathon (25.10.2026)
+(function(){
+  const el = $("eventCountdown");
+  if (!el) return;
+  const target = new Date(2026, 9, 25);   // Monat 9 = Oktober
+  const days = Math.ceil((target - new Date()) / 86400000);
+  el.textContent = days > 0 ? `noch ${days} Tage` : (days === 0 ? "heute!" : "Termin vorbei");
+})();
+
+// Sollte Firebase ungewöhnlich lange brauchen, den Anmelde-Knopf dennoch zeigen
+if (window.FIREBASE_CONFIG){
+  setTimeout(()=>{ if (!authResolved){ authResolved = true; updateAuthUI(); } }, 5000);
+}
+</script>
+
+<script>
+/* ============ Firebase-Anbindung (lädt nur mit Konfiguration) ============ */
+(async ()=>{
+  if (!window.FIREBASE_CONFIG) return;
+  try{
+    const V = "10.12.2";
+    const [appM, authM, fsM] = await Promise.all([
+      import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`),
+      import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`),
+      import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`)
+    ]);
+    const app  = appM.initializeApp(window.FIREBASE_CONFIG);
+    const auth = authM.getAuth(app);
+    const db   = fsM.getFirestore(app);
+    const provider = new authM.GoogleAuthProvider();
+
+    window.cloudSignIn = async ()=>{
+      provider.setCustomParameters({ prompt: "select_account" });
+      try{
+        await authM.signInWithPopup(auth, provider);
+      }catch(e){
+        const code = (e && e.code) || "";
+        if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return;
+        if (code === "auth/unauthorized-domain"){
+          window.__appToast("Diese Adresse ist in Firebase nicht freigegeben — trage sie unter Authentication → Settings → Authorized domains ein.");
+          return;
+        }
+        if (code === "auth/operation-not-allowed"){
+          window.__appToast("Google-Anmeldung ist im Firebase-Projekt nicht aktiviert (Authentication → Sign-in method → Google).");
+          return;
+        }
+        if (code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment"){
+          try{ await authM.signInWithRedirect(auth, provider); return; }
+          catch(e2){ window.__appToast("Anmeldung fehlgeschlagen: " + ((e2 && e2.code) || e2.message)); return; }
+        }
+        window.__appToast("Anmeldung fehlgeschlagen: " + (code || e.message));
+      }
+    };
+    window.cloudSignOut = async ()=>{ await authM.signOut(auth); };
+
+    const routesCol = uid => fsM.collection(db, "users", uid, "routes");
+
+    window.cloudList = async ()=>{
+      const uid = auth.currentUser.uid;
+      const snap = await fsM.getDocs(fsM.query(routesCol(uid), fsM.orderBy("ts","desc")));
+      return snap.docs.map(d=>{
+        const x = d.data();
+        let body = {};
+        try{ body = JSON.parse(x.data || "{}"); }catch{}
+        return {
+          id: d.id, name: x.name || "Strecke", meters: x.meters || 0, ts: x.ts || 0,
+          waypoints: body.waypoints || [], segments: body.segments || []
+        };
+      });
+    };
+    window.cloudSave = async (r)=>{
+      const uid = auth.currentUser.uid;
+      const ref = fsM.doc(routesCol(uid));
+      await fsM.setDoc(ref, {
+        name: r.name, meters: r.meters, ts: r.ts || Date.now(),
+        data: JSON.stringify({ waypoints: r.waypoints, segments: r.segments })
+      });
+      return ref.id;
+    };
+    window.cloudDelete = async (id)=>{
+      const uid = auth.currentUser.uid;
+      await fsM.deleteDoc(fsM.doc(db, "users", uid, "routes", id));
+    };
+
+    // Öffentlich geteilte Routen
+    window.cloudPublish = async (r)=>{
+      const u = auth.currentUser;
+      const ref = fsM.doc(fsM.collection(db, "shared"));
+      await fsM.setDoc(ref, {
+        ownerUid: u.uid,
+        ownerName: u.displayName || "Jemand",
+        name: r.name, meters: r.meters, ts: Date.now(),
+        data: JSON.stringify({ waypoints: r.waypoints, segments: r.segments })
+      });
+      return ref.id;
+    };
+    window.cloudGetShared = async (id)=>{
+      const snap = await fsM.getDoc(fsM.doc(db, "shared", id));
+      if (!snap.exists()) return null;
+      const x = snap.data();
+      let body = {};
+      try{ body = JSON.parse(x.data || "{}"); }catch{}
+      return {
+        id, name: x.name || "Geteilte Route", meters: x.meters || 0,
+        ownerName: x.ownerName || "", waypoints: body.waypoints || [], segments: body.segments || []
+      };
+    };
+
+    // Ergebnis einer Weiterleitungs-Anmeldung auswerten (Handy/Popup-Blocker) und Fehler melden
+    try{ await authM.getRedirectResult(auth); }
+    catch(e){
+      const code = (e && e.code) || "";
+      if (code === "auth/unauthorized-domain")
+        window.__appToast("Diese Adresse ist in Firebase nicht freigegeben — unter Authentication → Settings → Authorized domains eintragen.");
+      else if (code)
+        window.__appToast("Anmeldung fehlgeschlagen: " + code);
+    }
+    authM.onAuthStateChanged(auth, u=>{
+      window.__appAuth(u ? { uid: u.uid, name: u.displayName || "Konto", photo: u.photoURL || "" } : null);
+    });
+    if (window.__appCloudReady) window.__appCloudReady();
+  }catch(e){
+    if (window.__appCloudFailed) window.__appCloudFailed();
+    window.__appToast("Anmeldung/Cloud konnte nicht geladen werden — Strecken werden lokal auf diesem Gerät gespeichert.");
+  }
+})();
+</script>
+</body>
+</html>
