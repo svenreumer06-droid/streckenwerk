@@ -2338,69 +2338,92 @@ async function routeAssistant(raw){
 // KI aktiv, wenn ein sicherer Proxy konfiguriert ist ODER (unsicher) ein Schlüssel im Browser liegt
 function aiEnabled(){ return !!window.AI_PROXY || !!(window.AI_API_KEY || "").trim(); }
 
-// Echtes Sprachmodell. Gibt {actions, reply} zurück oder null (kein KI-Modus → eingebauter Assistent).
 async function aiInterpret(raw){
   const key = (window.AI_API_KEY || "").trim();
-  const useProxy = !!window.AI_PROXY && !key;   // Proxy hat Vorrang, außer es ist explizit ein Direkt-Schlüssel gesetzt
+  const useProxy = !!window.AI_PROXY;   // Proxy immer bevorzugen wenn gesetzt
   if (!useProxy && !key) return null;
+
   const state = {
     wunschdistanz_km: parseFloat($("genDist").value) || 5,
     untergrund: surfacePref, hoehe: elevPref,
-    richtung: $("genDir").value, anzahl_vorschlaege: parseInt($("genCount").value, 10) || 3,
+    richtung: $("genDir").value,
+    anzahl_vorschlaege: parseInt($("genCount").value, 10) || 3,
     offene_vorschlaege: proposals.length,
     uebernommene_runde: segments.length ? { km: +(totalMeters()/1000).toFixed(2) } : null,
     angemeldet: !!user
   };
+
   const sys =
-`Du bist der Routen-Assistent der Jogging-App „Streckenwerk". Der Nutzer schreibt Deutsch.
+`Du bist der Routen-Assistent der Jogging-App "Streckenwerk". Der Nutzer schreibt Deutsch.
 Wandle seine Nachricht in Aktionen um und antworte kurz und freundlich auf Deutsch.
-Mögliche Aktionen (Feld "actions", Array):
-- {"type":"set_distance","km":Z}        Wunschdistanz 1–60 km
-- {"type":"adjust_distance","delta":Z}  Distanz ändern (+/- km)
-- {"type":"set_surface","value":"any|paved|trail"}   (Wald/Trail=trail, Asphalt/Strasse=paved)
-- {"type":"set_elevation","value":"any|flat|hilly"}  (flach=flat, hügelig=hilly)
+Moegliche Aktionen (Feld "actions", Array):
+- {"type":"set_distance","km":Z}        Wunschdistanz 1-60 km
+- {"type":"adjust_distance","delta":Z}  Distanz aendern (+/- km)
+- {"type":"set_surface","value":"any|paved|trail"}
+- {"type":"set_elevation","value":"any|flat|hilly"}
 - {"type":"set_direction","value":"auto|N|E|S|W"}
 - {"type":"set_count","n":1..5}
-- {"type":"generate"}    neue Runden erzeugen
-- {"type":"reverse"}     übernommene Runde umkehren
+- {"type":"generate"}
+- {"type":"reverse"}
 - {"type":"save"} {"type":"share"} {"type":"clear"}
-- {"type":"adopt","index":0..4}   Vorschlag A=0, B=1 …
-Regeln: Wenn du Distanz/Untergrund/Höhe/Richtung/Anzahl änderst, hänge meist {"type":"generate"} an.
-Fragen zur Runde beantwortest du im Feld "reply" anhand des Zustands (keine Aktion nötig).
-Aktueller Zustand: ${JSON.stringify(state)}.
-Antworte AUSSCHLIESSLICH mit reinem JSON: {"actions":[...],"reply":"..."} — kein Markdown, keine Code-Blöcke.`;
+- {"type":"adopt","index":0..4}
+Regeln: Bei Distanz/Untergrund/Hoehe/Richtung-Aenderung immer generate anhaengen.
+Zustand: ${JSON.stringify(state)}.
+Antworte NUR mit JSON ohne Markdown: {"actions":[...],"reply":"..."}`;
+
   const reqBody = {
-    model: window.AI_MODEL || "claude-haiku-4-5-20251001",
+    model: "llama-3.3-70b-versatile",
     max_tokens: 500,
     system: sys,
     messages: [{ role: "user", content: raw }]
   };
+
   let res;
   if (useProxy){
-    // Sicher: Schlüssel liegt serverseitig in der Netlify-Funktion
     res = await fetch("/.netlify/functions/chat", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(reqBody)
     });
   } else {
-    // Unsicher: Direktaufruf mit im Browser hinterlegtem Schlüssel
-    res = await fetch("https://api.anthropic.com/v1/messages", {
+    // Direktaufruf (unsicher, nur für Tests)
+    res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true"
+        "authorization": `Bearer ${key}`
       },
-      body: JSON.stringify(reqBody)
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        max_tokens: 500,
+        messages: [
+          { role: "system", content: sys },
+          { role: "user", content: raw }
+        ]
+      })
     });
   }
-  if (!res.ok) throw new Error("ai " + res.status);
+
+  if (!res.ok){
+    const errText = await res.text().catch(()=>"");
+    throw new Error(`KI-Fehler ${res.status}: ${errText.slice(0,120)}`);
+  }
+
   const data = await res.json();
-  const txt = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
-  const clean = txt.replace(/^```(?:json)?/i, "").replace(/```$/,"").trim();
-  return JSON.parse(clean);
+
+  // Proxy gibt bereits verarbeitetes Anthropic-Format zurück {content:[{type,text}]}
+  // Direkt-Groq gibt OpenAI-Format zurück {choices:[{message:{content}}]}
+  let txt = "";
+  if (data.content && Array.isArray(data.content)){
+    txt = data.content.filter(b=>b.type==="text").map(b=>b.text).join("").trim();
+  } else if (data.choices && data.choices[0]){
+    txt = (data.choices[0].message?.content || "").trim();
+  }
+
+  // JSON aus der Antwort extrahieren — auch wenn Modell Markdown drumherum schreibt
+  const jsonMatch = txt.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("Kein JSON in Antwort: " + txt.slice(0,80));
+  return JSON.parse(jsonMatch[0]);
 }
 
 // Vom Modell gelieferte Aktionen ausführen
@@ -2437,13 +2460,18 @@ async function sendChat(){
   try{
     let reply;
     let aiResult = null;
-    try{ aiResult = await aiInterpret(text); }   // echtes Modell, falls Schlüssel vorhanden
-    catch(e){ aiResult = null; }                 // bei Fehler: eingebauter Assistent
+    try{ aiResult = await aiInterpret(text); }
+    catch(e){
+      console.warn("KI-Fehler:", e.message);
+      // Fehlermeldung im Chat anzeigen wenn kein Fallback möglich
+      if (aiEnabled()) chatAdd("KI momentan nicht erreichbar — ich nutze den eingebauten Assistenten. (" + e.message.slice(0,60) + ")", "bot");
+      aiResult = null;
+    }
     if (aiResult){
       await executeActions(aiResult);
       reply = (aiResult.reply || "Erledigt.").trim();
     } else {
-      reply = await routeAssistant(text);        // eingebauter Assistent (ohne Schlüssel / Fallback)
+      reply = await routeAssistant(text);
     }
     thinking.textContent = reply;
   }catch(e){
